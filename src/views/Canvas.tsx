@@ -164,8 +164,8 @@ function TopicCanvas({
       <div className="canvas-stage" ref={stage} onPointerDown={onPointerDown}>
         <div className="canvas-tools">
           <div className="row" style={{ gap: 10 }}>
-            <button className="btn small" onClick={() => go('#/walk')} title="Choose another topic">
-              ⌕ Topics
+            <button className="btn topics-btn" onClick={() => go('#/walk')} title="Choose another topic">
+              <span className="topics-btn-icon">⌕</span> Topics
             </button>
             <span className="topic-name">{topicTitle}</span>
             <div className="seg">
