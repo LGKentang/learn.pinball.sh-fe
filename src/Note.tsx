@@ -60,7 +60,7 @@ export function Note({
               <button
                 type="button"
                 className="wikilink"
-                title={`${hit.exploration_title} — go to this question`}
+                title={`${hit.book_title} — go to this question`}
                 onClick={() => onNavigate?.(hit)}
               >
                 {label}

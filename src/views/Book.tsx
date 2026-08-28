@@ -4,8 +4,8 @@ import {
   REVISION_LABEL,
   RELATION_LABEL,
   RELATION_KINDS,
-  type Exploration,
-  type ExplorationDetail,
+  type Book,
+  type BookDetail,
   type QuestionDetail,
   type RelationKind,
   type RevisionKind,
@@ -16,26 +16,26 @@ import { MarkdownEditor } from '../MarkdownEditor';
 import { Note, invalidateQuestionIndex } from '../Note';
 import { diffStats, wordDiff } from '../diff';
 
-export function ExplorationView({
-  explorationId,
+export function BookView({
+  bookId,
   questionId,
   go,
 }: {
-  explorationId: string;
+  bookId: string;
   questionId: string | null;
   go: (hash: string) => void;
 }) {
-  const [detail, setDetail] = useState<ExplorationDetail | null>(null);
+  const [detail, setDetail] = useState<BookDetail | null>(null);
   const [question, setQuestion] = useState<QuestionDetail | null>(null);
   const [error, setError] = useState<unknown>(null);
 
   const loadTree = useCallback(async () => {
     try {
-      setDetail(await api.exploration(explorationId));
+      setDetail(await api.book(bookId));
     } catch (e) {
       setError(e);
     }
-  }, [explorationId]);
+  }, [bookId]);
 
   const loadQuestion = useCallback(async (id: string) => {
     try {
@@ -56,8 +56,8 @@ export function ExplorationView({
 
   // Land on the first root question so the workspace is never a blank slate.
   useEffect(() => {
-    if (!questionId && detail?.tree.length) go(`#/e/${explorationId}/q/${detail.tree[0].id}`);
-  }, [questionId, detail, explorationId, go]);
+    if (!questionId && detail?.tree.length) go(`#/b/${bookId}/q/${detail.tree[0].id}`);
+  }, [questionId, detail, bookId, go]);
 
   async function refresh() {
     invalidateQuestionIndex();
@@ -78,22 +78,18 @@ export function ExplorationView({
     <div className="workspace">
       <aside className="sidebar">
         <div className="spread" style={{ padding: '0 6px 12px' }}>
-          <a href="#/" className="small muted">
-            ← All explorations
+          <a href="#/books" className="small muted">
+            ← All books
           </a>
         </div>
-        <ExplorationHeader
-          exploration={detail.exploration}
-          onSaved={loadTree}
-          onError={setError}
-        />
+        <BookHeader book={detail.book} onSaved={loadTree} onError={setError} />
 
         {detail.tree.map((n) => (
           <button
             key={n.id}
             className={`tree-node ${n.id === questionId ? 'on' : ''} ${n.parked_at ? 'parked' : ''}`}
             style={{ paddingLeft: 8 + n.depth * 16 }}
-            onClick={() => go(`#/e/${explorationId}/q/${n.id}`)}
+            onClick={() => go(`#/b/${bookId}/q/${n.id}`)}
           >
             <i className={`dot ${n.state}`} />
             <span className="label">{n.title}</span>
@@ -104,9 +100,9 @@ export function ExplorationView({
           <QuickAsk
             placeholder="Ask a new root question…"
             onSubmit={async (title) => {
-              const q = await api.createQuestion({ exploration_id: explorationId, title });
+              const q = await api.createQuestion({ book_id: bookId, title });
               await loadTree();
-              go(`#/e/${explorationId}/q/${q.id}`);
+              go(`#/b/${bookId}/q/${q.id}`);
             }}
           />
         </div>
@@ -121,7 +117,7 @@ export function ExplorationView({
               go={go}
               refresh={refresh}
               onError={setError}
-              explorationId={explorationId}
+              bookId={bookId}
             />
           ) : (
             <div className="empty-state">
@@ -171,30 +167,30 @@ function DiffBody({ before, after }: { before: string; after: string }) {
  * rabbit hole from the path, so a topic created without one needs a way to gain
  * one later — not only at the moment of creation.
  */
-function ExplorationHeader({
-  exploration,
+function BookHeader({
+  book,
   onSaved,
   onError,
 }: {
-  exploration: Exploration;
+  book: Book;
   onSaved: () => Promise<void> | void;
   onError: (e: unknown) => void;
 }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingIntent, setEditingIntent] = useState(false);
-  const [title, setTitle] = useState(exploration.title);
-  const [intent, setIntent] = useState(exploration.intent ?? '');
+  const [title, setTitle] = useState(book.title);
+  const [intent, setIntent] = useState(book.intent ?? '');
 
   useEffect(() => {
-    setTitle(exploration.title);
-    setIntent(exploration.intent ?? '');
+    setTitle(book.title);
+    setIntent(book.intent ?? '');
     setEditingTitle(false);
     setEditingIntent(false);
-  }, [exploration.id, exploration.title, exploration.intent]);
+  }, [book.id, book.title, book.intent]);
 
   async function save(patch: { title?: string; intent?: string | null }) {
     try {
-      await api.updateExploration(exploration.id, patch);
+      await api.updateBook(book.id, patch);
       await onSaved();
     } catch (e) {
       onError(e);
@@ -204,12 +200,12 @@ function ExplorationHeader({
   async function commitTitle() {
     const t = title.trim();
     setEditingTitle(false);
-    if (!t || t === exploration.title) return setTitle(exploration.title);
+    if (!t || t === book.title) return setTitle(book.title);
     await save({ title: t });
   }
 
   return (
-    <div className="exp-header">
+    <div className="book-header">
       {editingTitle ? (
         <input
           autoFocus
@@ -220,14 +216,14 @@ function ExplorationHeader({
           onKeyDown={(e) => {
             if (e.key === 'Enter') void commitTitle();
             if (e.key === 'Escape') {
-              setTitle(exploration.title);
+              setTitle(book.title);
               setEditingTitle(false);
             }
           }}
         />
       ) : (
         <button className="title-edit" onClick={() => setEditingTitle(true)} title="Rename this topic">
-          <h2>{exploration.title}</h2>
+          <h2>{book.title}</h2>
           <span className="pencil">✎</span>
         </button>
       )}
@@ -244,7 +240,7 @@ function ExplorationHeader({
             onChange={(e) => setIntent(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Escape') {
-                setIntent(exploration.intent ?? '');
+                setIntent(book.intent ?? '');
                 setEditingIntent(false);
               }
             }}
@@ -253,7 +249,7 @@ function ExplorationHeader({
             <button
               className="btn ghost small"
               onClick={() => {
-                setIntent(exploration.intent ?? '');
+                setIntent(book.intent ?? '');
                 setEditingIntent(false);
               }}
             >
@@ -270,12 +266,12 @@ function ExplorationHeader({
             </button>
           </div>
         </div>
-      ) : exploration.intent ? (
+      ) : book.intent ? (
         <button className="intent-box" onClick={() => setEditingIntent(true)} title="Edit the learning intent">
           <div className="eyebrow">
             Learning intent <span className="pencil">✎</span>
           </div>
-          <p>{exploration.intent}</p>
+          <p>{book.intent}</p>
         </button>
       ) : (
         <button className="intent-add" onClick={() => setEditingIntent(true)}>
@@ -292,13 +288,13 @@ function QuestionPane({
   go,
   refresh,
   onError,
-  explorationId,
+  bookId,
 }: {
   detail: QuestionDetail;
   go: (hash: string) => void;
   refresh: () => Promise<void>;
   onError: (e: unknown) => void;
-  explorationId: string;
+  bookId: string;
 }) {
   const { question: q, ancestors, children, relations, revisions } = detail;
   const [editing, setEditing] = useState(false);
@@ -352,7 +348,7 @@ function QuestionPane({
       <nav className="crumbs">
         {ancestors.map((a) => (
           <span key={a.id} className="row" style={{ gap: 6 }}>
-            <button onClick={() => go(`#/e/${explorationId}/q/${a.id}`)}>{a.title}</button>
+            <button onClick={() => go(`#/b/${bookId}/q/${a.id}`)}>{a.title}</button>
             <span className="sep">›</span>
           </span>
         ))}
@@ -463,10 +459,10 @@ function QuestionPane({
             {q.understanding ? (
               <Note
                 text={q.understanding}
-                onNavigate={(t) => go(`#/e/${t.exploration_id}/q/${t.id}`)}
+                onNavigate={(t) => go(`#/b/${t.book_id}/q/${t.id}`)}
                 onCreate={async (title) => {
                   await api.createQuestion({
-                    exploration_id: q.exploration_id,
+                    book_id: q.book_id,
                     parent_id: q.id,
                     title,
                   });
@@ -527,7 +523,7 @@ function QuestionPane({
             <button
               key={c.id}
               className="child"
-              onClick={() => go(`#/e/${explorationId}/q/${c.id}`)}
+              onClick={() => go(`#/b/${bookId}/q/${c.id}`)}
             >
               <i className={`dot ${c.state}`} style={{ width: 7, height: 7, borderRadius: '50%' }} />
               <span className="grow">{c.title}</span>
@@ -545,7 +541,7 @@ function QuestionPane({
           placeholder="What don't you understand about this yet?"
           onSubmit={async (title) => {
             await api.createQuestion({
-              exploration_id: q.exploration_id,
+              book_id: q.book_id,
               parent_id: q.id,
               title,
             });
@@ -580,13 +576,13 @@ function QuestionPane({
                 </span>
                 <button
                   className="link grow"
-                  onClick={() => go(`#/e/${r.exploration_id}/q/${r.id}`)}
+                  onClick={() => go(`#/b/${r.book_id}/q/${r.id}`)}
                 >
                   {r.title}
                 </button>
-                {r.exploration_id !== explorationId && (
-                  <span className="cross" title={r.exploration_title}>
-                    {r.exploration_title}
+                {r.book_id !== bookId && (
+                  <span className="cross" title={r.book_title}>
+                    {r.book_title}
                   </span>
                 )}
                 <button
@@ -610,7 +606,7 @@ function QuestionPane({
           ))
         ) : (
           <p className="small dimmer" style={{ margin: 0 }}>
-            Nothing linked yet. Connections can cross explorations entirely.
+            Nothing linked yet. Connections can cross books entirely.
           </p>
         )}
       </section>
@@ -627,20 +623,20 @@ function RelationForm({
   onDone: () => Promise<void>;
   onError: (e: unknown) => void;
 }) {
-  const [options, setOptions] = useState<{ id: string; title: string; exploration: string }[]>([]);
+  const [options, setOptions] = useState<{ id: string; title: string; book: string }[]>([]);
   const [target, setTarget] = useState('');
   const [kind, setKind] = useState<RelationKind>('related_to');
   const [note, setNote] = useState('');
 
   useEffect(() => {
     void (async () => {
-      const list = await api.explorations();
+      const list = await api.books();
       const all = await Promise.all(
-        list.map(async (e) =>
-          (await api.exploration(e.id)).tree.map((t) => ({
+        list.map(async (b) =>
+          (await api.book(b.id)).tree.map((t) => ({
             id: t.id,
             title: t.title,
-            exploration: e.title,
+            book: b.title,
           })),
         ),
       );
@@ -672,7 +668,7 @@ function RelationForm({
           <option value="">choose a question…</option>
           {options.map((o) => (
             <option key={o.id} value={o.id}>
-              {o.exploration} — {o.title}
+              {o.book} — {o.title}
             </option>
           ))}
         </select>

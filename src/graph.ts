@@ -9,8 +9,8 @@ export interface GNode {
   parked: boolean;
   understanding: string | null;
   parentId: string | null;
-  explorationId: string;
-  explorationTitle: string;
+  bookId: string;
+  bookTitle: string;
 }
 
 export interface Step {
@@ -29,7 +29,7 @@ export interface Graph {
   relations: Map<string, Step[]>;
 }
 
-/** The whole question graph, across every exploration — walking should not stop at a boundary. */
+/** The whole question graph, across every book — walking should not stop at a boundary. */
 export function useGraph() {
   const [graph, setGraph] = useState<Graph | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -37,8 +37,8 @@ export function useGraph() {
   useEffect(() => {
     void (async () => {
       try {
-        const list = await api.explorations();
-        const details = await Promise.all(list.map((e) => api.exploration(e.id)));
+        const list = await api.books();
+        const details = await Promise.all(list.map((b) => api.book(b.id)));
 
         const nodes = new Map<string, GNode>();
         const children = new Map<string, string[]>();
@@ -53,8 +53,8 @@ export function useGraph() {
               parked: !!t.parked_at,
               understanding: t.understanding,
               parentId: t.parent_id,
-              explorationId: d.exploration.id,
-              explorationTitle: d.exploration.title,
+              bookId: d.book.id,
+              bookTitle: d.book.title,
             });
             if (t.parent_id) {
               if (!children.has(t.parent_id)) children.set(t.parent_id, []);
@@ -63,7 +63,7 @@ export function useGraph() {
           }
         }
 
-        // Cross-exploration edges come back from both sides, so de-duplicate.
+        // Cross-book edges come back from both sides, so de-duplicate.
         const seen = new Set<string>();
         for (const d of details) {
           for (const e of d.edges) {

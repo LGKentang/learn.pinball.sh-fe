@@ -50,15 +50,15 @@ function curve(a: Pos, b: Pos): string {
 /**
  * Tidy left-to-right tree layout for a single topic: depth becomes the column,
  * leaves claim rows in order, and every parent centres on the children it opened
- * up. Scoped to one exploration on purpose — the whole library at once was a wall,
+ * up. Scoped to one book on purpose — the whole library at once was a wall,
  * not a map. Links leaving the topic are surfaced per node instead of drawn.
  */
-export function layoutGraph(graph: Graph, explorationId: string): Layout {
+export function layoutGraph(graph: Graph, bookId: string): Layout {
   const pos = new Map<string, Pos>();
   const order: string[] = [];
   let cursor = 0;
 
-  const inScope = (n: GNode) => n.explorationId === explorationId;
+  const inScope = (n: GNode) => n.bookId === bookId;
 
   function place(node: GNode, depth: number): number {
     order.push(node.id);

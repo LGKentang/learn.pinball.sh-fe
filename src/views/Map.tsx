@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api, RELATION_LABEL, STATE_LABEL, STATES, type ExplorationDetail, type State } from '../api';
+import { api, RELATION_LABEL, STATE_LABEL, STATES, type BookDetail, type State } from '../api';
 import { ErrorNote } from '../ui';
 import { PHRASE } from '../relations';
 
@@ -15,7 +15,6 @@ const WIDTH = 900;
 const ROW = 26;
 const INDENT = 26;
 const PAD = 26;
-const GROUP_GAP = 40;
 const GUTTER = WIDTH - 210; // x where connection arcs live
 const MAX_CHARS = 56;
 const CHAR_W = 6.35; // 11px monospace advance, close enough to place leader lines
@@ -30,7 +29,6 @@ interface Placed {
   y: number;
   textEnd: number;
   parentId: string | null;
-  explorationId: string;
 }
 
 /**
@@ -38,7 +36,9 @@ interface Placed {
  * than a force-directed blob. The map exists to expose depth, dependencies and
  * unexplored branches — a layout that keeps the question text readable does that
  * better than a hairball. Every arc has a leader line back to each endpoint's row,
- * so you can always tell which two questions it joins.
+ * so you can always tell which two questions it joins. Scoped to one book; a link
+ * that crosses into another book can't be drawn as an arc (the far end isn't on
+ * this canvas), so it surfaces in the inspector instead, tagged "elsewhere".
  */
 interface Rel {
   phrase: string;
@@ -49,61 +49,63 @@ interface Rel {
 interface Conn {
   id: string;
   title: string;
-  explorationId: string;
+  bookId: string;
+  bookTitle: string;
   crosses: boolean;
   rels: Rel[];
 }
 
-
-export function MapView({ go }: { go: (h: string) => void }) {
-  const [details, setDetails] = useState<ExplorationDetail[] | null>(null);
+export function MapView({
+  bookId,
+  selectedId,
+  go,
+}: {
+  bookId: string;
+  selectedId?: string;
+  go: (h: string) => void;
+}) {
+  const [detail, setDetail] = useState<BookDetail | null>(null);
   const [error, setError] = useState<unknown>(null);
-  const [hover, setHover] = useState<string | null>(null);
+  const [hover, setHover] = useState<string | null>(selectedId ?? null);
 
   useEffect(() => {
     void (async () => {
       try {
-        const list = await api.explorations();
-        setDetails(await Promise.all(list.map((e) => api.exploration(e.id))));
+        setDetail(await api.book(bookId));
       } catch (e) {
         setError(e);
       }
     })();
-  }, []);
+  }, [bookId]);
 
   const layout = useMemo(() => {
-    if (!details) return null;
+    if (!detail) return null;
     const nodes: Placed[] = [];
-    const groups: { title: string; y: number; id: string }[] = [];
     let y = PAD;
 
-    for (const d of details) {
-      groups.push({ title: d.exploration.title, y, id: d.exploration.id });
+    for (const n of detail.tree) {
+      const label = n.title.length > MAX_CHARS ? `${n.title.slice(0, MAX_CHARS - 1)}…` : n.title;
+      const x = PAD + 14 + n.depth * INDENT;
+      nodes.push({
+        id: n.id,
+        title: n.title,
+        label,
+        state: n.state,
+        parked: !!n.parked_at,
+        x,
+        y,
+        textEnd: x + 10 + label.length * CHAR_W,
+        parentId: n.parent_id,
+      });
       y += ROW;
-      for (const n of d.tree) {
-        const label = n.title.length > MAX_CHARS ? `${n.title.slice(0, MAX_CHARS - 1)}…` : n.title;
-        const x = PAD + 14 + n.depth * INDENT;
-        nodes.push({
-          id: n.id,
-          title: n.title,
-          label,
-          state: n.state,
-          parked: !!n.parked_at,
-          x,
-          y,
-          textEnd: x + 10 + label.length * CHAR_W,
-          parentId: n.parent_id,
-          explorationId: d.exploration.id,
-        });
-        y += ROW;
-      }
-      y += GROUP_GAP;
     }
 
     const byId = new Map(nodes.map((n) => [n.id, n]));
+
+    // Only edges with both ends on this canvas become arcs; a link that crosses
+    // into another book surfaces in the inspector instead (see `conns` below).
     const seen = new Set<string>();
-    const edges = details
-      .flatMap((d) => d.edges)
+    const edges = detail.edges
       .filter((e) => {
         const key = [e.from_id, e.to_id, e.kind].join('|');
         if (seen.has(key)) return false;
@@ -113,20 +115,26 @@ export function MapView({ go }: { go: (h: string) => void }) {
       .map((e) => ({ ...e, a: byId.get(e.from_id), b: byId.get(e.to_id) }))
       .filter((e): e is typeof e & { a: Placed; b: Placed } => !!e.a && !!e.b);
 
-    // Which questions take part in any connection, and who neighbours whom.
+    // Every question that takes part in any connection — including one that
+    // crosses into another book, which is why this is built from the raw edge
+    // list rather than from `edges` above.
     const neighbours = new Map<string, Set<string>>();
-    for (const e of edges) {
-      if (!neighbours.has(e.a.id)) neighbours.set(e.a.id, new Set());
-      if (!neighbours.has(e.b.id)) neighbours.set(e.b.id, new Set());
-      neighbours.get(e.a.id)!.add(e.b.id);
-      neighbours.get(e.b.id)!.add(e.a.id);
+    for (const e of detail.edges) {
+      if (byId.has(e.from_id)) {
+        if (!neighbours.has(e.from_id)) neighbours.set(e.from_id, new Set());
+        neighbours.get(e.from_id)!.add(e.to_id);
+      }
+      if (byId.has(e.to_id)) {
+        if (!neighbours.has(e.to_id)) neighbours.set(e.to_id, new Set());
+        neighbours.get(e.to_id)!.add(e.from_id);
+      }
     }
 
-    return { nodes, groups, edges, height: y, byId, neighbours };
-  }, [details]);
+    return { nodes, edges, height: y, byId, neighbours };
+  }, [detail]);
 
   if (error) return <div className="wrap"><ErrorNote error={error} /></div>;
-  if (!layout) return <div className="wrap"><p className="muted">Loading…</p></div>;
+  if (!layout || !detail) return <div className="wrap"><p className="muted">Loading…</p></div>;
 
   const lit = (id: string) =>
     !hover || hover === id || layout.neighbours.get(hover)?.has(id) === true;
@@ -136,46 +144,48 @@ export function MapView({ go }: { go: (h: string) => void }) {
   /**
    * Keyed on the other question, not on the relation kind — two questions linked
    * twice are one relationship with two things to say about it, and listing the
-   * same title under two headings was pure noise.
+   * same title under two headings was pure noise. Built straight from the raw edge
+   * list (not `layout.edges`) so a link to another book — where the far node was
+   * never fetched — still resolves, using the title/book carried along by the edge.
    */
   const conns: Conn[] = (() => {
     if (!focused) return [];
     const by = new Map<string, Conn>();
-    for (const e of layout.edges) {
-      if (e.a.id !== focused.id && e.b.id !== focused.id) continue;
-      const outgoing = e.a.id === focused.id;
-      const other = outgoing ? e.b : e.a;
+    for (const e of detail.edges) {
+      if (e.from_id !== focused.id && e.to_id !== focused.id) continue;
+      const outgoing = e.from_id === focused.id;
+      const otherId = outgoing ? e.to_id : e.from_id;
       const p = PHRASE[`${e.kind}:${outgoing ? 'out' : 'in'}`];
       if (!p) continue;
-      if (!by.has(other.id)) {
-        by.set(other.id, {
-          id: other.id,
-          title: other.title,
-          explorationId: other.explorationId,
+      if (!by.has(otherId)) {
+        by.set(otherId, {
+          id: otherId,
+          title: outgoing ? e.to_title : e.from_title,
+          bookId: outgoing ? e.to_book_id : e.from_book_id,
+          bookTitle: outgoing ? e.to_book_title : e.from_book_title,
           crosses: !!e.crosses,
           rels: [],
         });
       }
-      by.get(other.id)!.rels.push({ phrase: p.phrase, note: e.note, rank: p.rank });
+      by.get(otherId)!.rels.push({ phrase: p.phrase, note: e.note, rank: p.rank });
     }
     return [...by.values()]
       .map((c) => ({ ...c, rels: c.rels.sort((x, y) => x.rank - y.rank) }))
       .sort((a, b) => a.rels[0].rank - b.rels[0].rank);
   })();
 
-
   return (
     <div className="wrap map-page">
       <div className="spread" style={{ marginBottom: 8 }}>
-        <h1 style={{ margin: 0 }}>Knowledge map</h1>
+        <h1 style={{ margin: 0 }}>{detail.book.title}</h1>
         <div className="seg">
-          <button onClick={() => go('#/walk')}>Canvas</button>
+          <button onClick={() => go(`#/b/${bookId}/map`)}>Canvas</button>
           <button className="on">Outline</button>
         </div>
       </div>
       <p className="muted small" style={{ marginTop: 0, marginBottom: 18 }}>
-        Every question at once — depth, dependencies, and what is still unanswered.
-        Hover a question to isolate its connections.
+        Every question in this book at once — depth, dependencies, and what is still
+        unanswered. Hover a question to isolate its connections.
       </p>
 
       <div className="legend" style={{ marginBottom: 14 }}>
@@ -191,7 +201,7 @@ export function MapView({ go }: { go: (h: string) => void }) {
         </span>
         <span>
           <b style={{ background: '#e2b352' }} />
-          crosses explorations
+          crosses books
         </span>
       </div>
 
@@ -203,7 +213,7 @@ export function MapView({ go }: { go: (h: string) => void }) {
             x1={GUTTER}
             y1={PAD - 10}
             x2={GUTTER}
-            y2={layout.height - GROUP_GAP}
+            y2={layout.height}
             stroke="#1f2532"
             strokeWidth="1"
           />
@@ -279,17 +289,6 @@ export function MapView({ go }: { go: (h: string) => void }) {
             );
           })}
 
-          {layout.groups.map((g) => (
-            <text
-              key={g.id}
-              x={PAD}
-              y={g.y + 4}
-              style={{ fill: '#e6e9f0', fontSize: 12, fontWeight: 600 }}
-            >
-              {g.title}
-            </text>
-          ))}
-
           {layout.nodes.map((n) => {
             const on = hover === n.id;
             const linked = layout.neighbours.has(n.id);
@@ -301,7 +300,7 @@ export function MapView({ go }: { go: (h: string) => void }) {
                 opacity={dim ? 0.25 : 1}
                 onMouseEnter={() => setHover(n.id)}
                 onMouseLeave={() => setHover(null)}
-                onClick={() => go(`#/e/${n.explorationId}/q/${n.id}`)}
+                onClick={() => go(`#/b/${bookId}/q/${n.id}`)}
                 style={{ cursor: 'pointer' }}
               >
                 {/* a ring marks questions that take part in a connection */}
@@ -352,10 +351,10 @@ export function MapView({ go }: { go: (h: string) => void }) {
                   <li key={c.id}>
                     <p className="line">
                       <span className="verb">{c.rels[0].phrase}</span>{' '}
-                      <button className="who" onClick={() => go(`#/e/${c.explorationId}/q/${c.id}`)}>
+                      <button className="who" onClick={() => go(`#/b/${c.bookId}/q/${c.id}`)}>
                         {c.title}
                       </button>
-                      {c.crosses && <span className="elsewhere">· elsewhere</span>}
+                      {c.crosses && <span className="elsewhere">· {c.bookTitle}</span>}
                     </p>
                     {c.rels[0].note && <p className="why">{c.rels[0].note}</p>}
                     {/* a second relationship to the same question is an aside, not a new row */}

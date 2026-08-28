@@ -50,7 +50,7 @@ export const REVISION_LABEL: Record<RevisionKind, string> = {
   post_drill: 'revised after a drill',
 };
 
-export interface Exploration {
+export interface Book {
   id: string;
   title: string;
   intent: string | null;
@@ -59,14 +59,14 @@ export interface Exploration {
   archived_at: string | null;
 }
 
-export interface ExplorationSummary extends Exploration {
+export interface BookSummary extends Book {
   question_count: number;
   open_count: number;
 }
 
 export interface Question {
   id: string;
-  exploration_id: string;
+  book_id: string;
   parent_id: string | null;
   title: string;
   understanding: string | null;
@@ -103,8 +103,8 @@ export interface Related {
   id: string;
   title: string;
   state: State;
-  exploration_id: string;
-  exploration_title: string;
+  book_id: string;
+  book_title: string;
 }
 
 export interface Stats {
@@ -119,11 +119,17 @@ export interface Edge {
   to_id: string;
   kind: RelationKind;
   note: string | null;
+  from_title: string;
+  from_book_id: string;
+  from_book_title: string;
+  to_title: string;
+  to_book_id: string;
+  to_book_title: string;
   crosses: number;
 }
 
-export interface ExplorationDetail {
-  exploration: Exploration;
+export interface BookDetail {
+  book: Book;
   tree: TreeNode[];
   edges: Edge[];
   stats: Stats;
@@ -133,13 +139,13 @@ export interface IndexedQuestion {
   id: string;
   title: string;
   state: State;
-  exploration_id: string;
-  exploration_title: string;
+  book_id: string;
+  book_title: string;
 }
 
 export interface QuestionDetail {
   question: Question;
-  exploration: Exploration;
+  book: Book;
   ancestors: { id: string; title: string; state: State }[];
   children: Question[];
   relations: Related[];
@@ -174,17 +180,17 @@ export async function uploadImage(file: File | Blob): Promise<{ url: string; byt
 }
 
 export const api = {
-  explorations: () => req<ExplorationSummary[]>('/explorations'),
-  exploration: (id: string) => req<ExplorationDetail>(`/explorations/${id}`),
-  createExploration: (title: string, intent: string | null) =>
-    post<Exploration>('/explorations', { title, intent }),
-  updateExploration: (id: string, patch: { title?: string; intent?: string | null }) =>
-    req<Exploration>(`/explorations/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
-  deleteExploration: (id: string) => req<void>(`/explorations/${id}`, { method: 'DELETE' }),
+  books: () => req<BookSummary[]>('/books'),
+  book: (id: string) => req<BookDetail>(`/books/${id}`),
+  createBook: (title: string, intent: string | null) =>
+    post<Book>('/books', { title, intent }),
+  updateBook: (id: string, patch: { title?: string; intent?: string | null }) =>
+    req<Book>(`/books/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deleteBook: (id: string) => req<void>(`/books/${id}`, { method: 'DELETE' }),
 
   question: (id: string) => req<QuestionDetail>(`/questions/${id}`),
   questionIndex: () => req<IndexedQuestion[]>('/questions'),
-  createQuestion: (input: { exploration_id: string; parent_id?: string | null; title: string }) =>
+  createQuestion: (input: { book_id: string; parent_id?: string | null; title: string }) =>
     post<Question>('/questions', input),
   patchQuestion: (
     id: string,
@@ -203,7 +209,7 @@ export const api = {
     post<{ relations: Related[] }>('/relations', input),
   deleteRelation: (id: string) => req<void>(`/relations/${id}`, { method: 'DELETE' }),
 
-  due: () => req<{ questions: (Question & { exploration_title: string })[] }>('/drill/due'),
+  due: () => req<{ questions: (Question & { book_title: string })[] }>('/drill/due'),
   review: (id: string, rating: Rating, recalled: string | null) =>
     post<{ question: Question; state_before: State; state_after: State }>(`/drill/${id}/review`, {
       rating,

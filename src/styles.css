@@ -131,26 +131,8 @@ h2 { font-size: 15px; margin: 0 0 12px; letter-spacing: -0.01em; }
   border: 1px dashed #4a3d22; border-radius: 20px; padding: 1px 8px;
 }
 
-/* --------------------------------------------------------------- home list */
-
-.explorations { display: grid; gap: 12px; }
-
-.exp-card {
-  display: block; background: var(--panel); border: 1px solid var(--line);
-  border-radius: var(--radius); padding: 18px 20px; transition: border-color .12s, transform .12s;
-}
-.exp-card:hover { border-color: #39425a; transform: translateY(-1px); }
-.exp-card h3 { margin: 0 0 6px; font-size: 17px; letter-spacing: -0.01em; }
-.exp-card .intent { color: var(--dim); font-size: 14px; margin: 0 0 14px; }
-.exp-card .intent.none { color: var(--dimmer); font-style: italic; }
-
 .meter { display: flex; height: 5px; border-radius: 3px; overflow: hidden; background: var(--line-soft); }
 .meter i { display: block; height: 100%; }
-.meter i.unexplored  { background: #39415440; }
-.meter i.exploring   { background: var(--amber); }
-.meter i.understood  { background: var(--blue); }
-.meter i.can_explain { background: var(--green); }
-.meter i.verified    { background: var(--violet); }
 
 .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; font-size: 12px; color: var(--dim); }
 .legend span { display: flex; align-items: center; gap: 6px; }
@@ -164,7 +146,7 @@ h2 { font-size: 15px; margin: 0 0 12px; letter-spacing: -0.01em; }
   border-right: 1px solid var(--line); background: #10131a;
   overflow: auto; padding: 18px 12px 60px;
 }
-.exp-header { margin-bottom: 16px; }
+.book-header { margin-bottom: 16px; }
 
 .title-edit {
   display: flex; align-items: baseline; gap: 8px; width: 100%;

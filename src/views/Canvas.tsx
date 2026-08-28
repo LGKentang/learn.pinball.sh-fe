@@ -4,7 +4,6 @@ import { ErrorNote } from '../ui';
 import { Note } from '../Note';
 import { useGraph, stepsFrom, type Graph } from '../graph';
 import { layoutGraph, NODE_H, NODE_W, type Layout } from '../canvasLayout';
-import { TopicPicker } from './TopicPicker';
 
 const COLOR: Record<State, string> = {
   unexplored: '#39415a',
@@ -31,41 +30,35 @@ const clampK = (k: number) => Math.min(MAX_K, Math.max(MIN_K, k));
  */
 export function Canvas({
   go,
-  explorationId,
+  bookId,
   selectedId,
 }: {
   go: (h: string) => void;
-  explorationId?: string;
+  bookId: string;
   selectedId?: string;
 }) {
   const { graph, error } = useGraph();
   if (error) return <div className="main"><div className="wrap"><ErrorNote error={error} /></div></div>;
-  if (!explorationId)
-    return (
-      <div className="main">
-        <TopicPicker graph={graph} go={go} />
-      </div>
-    );
   if (!graph) return <div className="main"><div className="wrap"><p className="muted">Loading…</p></div></div>;
   return (
-    <TopicCanvas key={explorationId} graph={graph} explorationId={explorationId} selectedId={selectedId} go={go} />
+    <TopicCanvas key={bookId} graph={graph} bookId={bookId} selectedId={selectedId} go={go} />
   );
 }
 
 function TopicCanvas({
   graph,
-  explorationId,
+  bookId,
   selectedId,
   go,
 }: {
   graph: Graph;
-  explorationId: string;
+  bookId: string;
   selectedId?: string;
   go: (h: string) => void;
 }) {
-  const layout = useMemo(() => layoutGraph(graph, explorationId), [graph, explorationId]);
+  const layout = useMemo(() => layoutGraph(graph, bookId), [graph, bookId]);
   const topicTitle =
-    [...graph.nodes.values()].find((n) => n.explorationId === explorationId)?.explorationTitle ?? 'Topic';
+    [...graph.nodes.values()].find((n) => n.bookId === bookId)?.bookTitle ?? 'Topic';
 
   const stage = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<View>({ x: 40, y: 40, k: 0.8 });
@@ -77,9 +70,9 @@ function TopicCanvas({
     (id: string) => {
       const n = graph.nodes.get(id);
       // following a link out of this topic re-scopes the canvas to where it lands
-      go(`#/walk/${n?.explorationId ?? explorationId}/${id}`);
+      go(`#/b/${n?.bookId ?? bookId}/map/q/${id}`);
     },
-    [go, graph, explorationId],
+    [go, graph, bookId],
   );
 
   /* ------------------------------------------------------------------ view */
@@ -164,13 +157,13 @@ function TopicCanvas({
       <div className="canvas-stage" ref={stage} onPointerDown={onPointerDown}>
         <div className="canvas-tools">
           <div className="row" style={{ gap: 10 }}>
-            <button className="btn topics-btn" onClick={() => go('#/walk')} title="Choose another topic">
-              <span className="topics-btn-icon">⌕</span> Topics
+            <button className="btn topics-btn" onClick={() => go('#/books')} title="Choose another book">
+              <span className="topics-btn-icon">⌕</span> Books
             </button>
             <span className="topic-name">{topicTitle}</span>
             <div className="seg">
               <button className="on">Canvas</button>
-              <button onClick={() => go('#/map')}>Outline</button>
+              <button onClick={() => go(`#/b/${bookId}/outline`)}>Outline</button>
             </div>
           </div>
           <div className="zoomer">
@@ -240,7 +233,7 @@ function TopicCanvas({
         selected={selected}
         select={select}
         go={go}
-        explorationId={explorationId}
+        bookId={bookId}
       />
     </div>
   );
@@ -259,14 +252,14 @@ function Inspector({
   selected,
   select,
   go,
-  explorationId,
+  bookId,
 }: {
   graph: Graph;
   layout: Layout;
   selected?: string;
   select: (id: string) => void;
   go: (h: string) => void;
-  explorationId: string;
+  bookId: string;
 }) {
   if (!selected) {
     return (
@@ -289,7 +282,7 @@ function Inspector({
   return (
     <aside className="inspector">
       <div className="inspector-body">
-        <p className="eyebrow">{node.explorationTitle}</p>
+        <p className="eyebrow">{node.bookTitle}</p>
         <h2 className="ititle">{node.title}</h2>
 
         <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
@@ -317,14 +310,14 @@ function Inspector({
         <Group title="Opens into" steps={down} select={select} />
         <Group
           title="Connects"
-          steps={across.filter((s) => s.node.explorationId === explorationId)}
+          steps={across.filter((s) => s.node.bookId === bookId)}
           select={select}
           showPhrase
         />
         {/* links that leave this topic are not drawn on the canvas, so name them here */}
         <Group
-          title="Leads to another topic"
-          steps={across.filter((s) => s.node.explorationId !== explorationId)}
+          title="Leads to another book"
+          steps={across.filter((s) => s.node.bookId !== bookId)}
           select={select}
           showPhrase
           showTopic
@@ -346,7 +339,7 @@ function Inspector({
         <button
           className="btn primary"
           style={{ width: '100%', marginTop: 8 }}
-          onClick={() => go(`#/e/${node.explorationId}/q/${node.id}`)}
+          onClick={() => go(`#/b/${node.bookId}/q/${node.id}`)}
         >
           Open question
         </button>
@@ -382,7 +375,7 @@ function Group({
             </span>
           )}
           <span className="t">{s.node.title}</span>
-          {showTopic && <span className="topic">↗ {s.node.explorationTitle}</span>}
+          {showTopic && <span className="topic">↗ {s.node.bookTitle}</span>}
           {s.note && <span className="why">{s.note}</span>}
         </button>
       ))}

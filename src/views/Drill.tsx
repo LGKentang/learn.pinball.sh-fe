@@ -11,7 +11,7 @@ const RATING_HINT: Record<Rating, string> = {
   could_explain_deeply: 'at least Can Explain · 21 days',
 };
 
-type Due = Question & { exploration_title: string };
+type Due = Question & { book_title: string };
 
 export function Drill({ go, onChanged }: { go: (h: string) => void; onChanged: () => void }) {
   const [queue, setQueue] = useState<Due[] | null>(null);
@@ -45,8 +45,8 @@ export function Drill({ go, onChanged }: { go: (h: string) => void; onChanged: (
               ? `${queue.length} question${queue.length === 1 ? '' : 's'} reviewed.`
               : 'Questions enter the rotation once you have written an understanding for them.'}
           </p>
-          <button className="btn" style={{ marginTop: 16 }} onClick={() => go('#/')}>
-            Back to explorations
+          <button className="btn" style={{ marginTop: 16 }} onClick={() => go('#/books')}>
+            Back to books
           </button>
         </div>
       </div>
@@ -78,7 +78,7 @@ export function Drill({ go, onChanged }: { go: (h: string) => void; onChanged: (
         <span className="eyebrow">
           Drill · {i + 1} of {queue.length}
         </span>
-        <span className="small dimmer mono">{current.exploration_title}</span>
+        <span className="small dimmer mono">{current.book_title}</span>
       </div>
 
       <div className="drill-card">
@@ -117,7 +117,7 @@ export function Drill({ go, onChanged }: { go: (h: string) => void; onChanged: (
             )}
             <div className="eyebrow" style={{ margin: '20px 0 6px' }}>What you had written</div>
             <div className="understanding">
-              <Note text={current.understanding} onNavigate={(t) => go(`#/e/${t.exploration_id}/q/${t.id}`)} />
+              <Note text={current.understanding} onNavigate={(t) => go(`#/b/${t.book_id}/q/${t.id}`)} />
             </div>
 
             {result ? (

@@ -183,41 +183,6 @@ export function QuickAsk({
   );
 }
 
-export function Meter({ counts, total }: { counts: Partial<Record<State, number>>; total: number }) {
-  if (!total) return <div className="meter" />;
-  return (
-    <>
-      <div className="meter">
-        {STATES.map((s) => {
-          const n = counts[s] ?? 0;
-          if (!n) return null;
-          return <i key={s} className={s} style={{ width: `${(n / total) * 100}%` }} />;
-        })}
-      </div>
-      <div className="legend">
-        {STATES.map((s) => {
-          const n = counts[s] ?? 0;
-          if (!n) return null;
-          return (
-            <span key={s}>
-              <b className={`meter-key ${s}`} style={{ background: METER_COLOR[s] }} />
-              {STATE_LABEL[s]} {n}
-            </span>
-          );
-        })}
-      </div>
-    </>
-  );
-}
-
-const METER_COLOR: Record<State, string> = {
-  unexplored: '#39415a',
-  exploring: 'var(--amber)',
-  understood: 'var(--blue)',
-  can_explain: 'var(--green)',
-  verified: 'var(--violet)',
-};
-
 export function ErrorNote({ error }: { error: unknown }) {
   if (!error) return null;
   return <div className="err">{error instanceof Error ? error.message : String(error)}</div>;

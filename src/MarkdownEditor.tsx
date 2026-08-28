@@ -112,7 +112,7 @@ export function MarkdownEditor({
       .slice(0, 12)
       .map((q) => ({
         label: q.title,
-        detail: q.exploration_title,
+        detail: q.book_title,
         apply: `[[${q.title}]]`,
         type: 'text',
       }));
