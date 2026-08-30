@@ -10,8 +10,11 @@ FROM nginx:1.27-alpine AS runtime
 COPY nginx.default.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 
+# Defaults so the image runs standalone; compose overrides them. Every name used
+# in the template must exist here or envsubst leaves the literal ${...} behind.
 ENV APP_HOST=localhost
-ENV BACKEND=backend:8787
+ENV BACKEND=pinball-api:8787
+ENV RESOLVER=127.0.0.11
 ENV NGINX_ENVSUBST_TEMPLATE_SUFFIX=.template
 
 EXPOSE 80

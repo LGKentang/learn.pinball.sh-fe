@@ -1,0 +1,66 @@
+# learn.pinball.sh — web client.
+#
+#   docker compose up -d --build
+#
+# No ports are published. The container joins an existing reverse-proxy network
+# and is reached by name, so TLS, certificates and routing stay where you already
+# handle them. Create the network once if it does not exist yet:
+#
+#   docker network create reverse-proxy-network
+#
+# Route two hostnames at this container:
+#
+#   learn.pinball.sh   ->  pinball-fe:80    the app
+#   *.pinball.sh       ->  pinball-fe:80    published sites
+#
+# Both can point here. nginx serves the SPA for APP_HOST and forwards every other
+# Host straight to the backend, which reads the handle from it. Whatever proxy you
+# put in front **must pass the original Host header through** — rewriting it turns
+# every published site into a 404.
+#
+# If you would rather route *.pinball.sh at the API container directly, that works
+# too; this container is then only responsible for APP_HOST.
+
+name: pinball-fe
+
+networks:
+  reverse-proxy-network:
+    external: true
+
+services:
+  web:
+    container_name: pinball-fe
+    build: .
+    image: pinball-fe:latest
+    restart: unless-stopped
+
+    environment:
+      # The one hostname that gets the single-page app. Anything else arriving
+      # here is treated as a published site and proxied to BACKEND.
+      APP_HOST: "${APP_HOST:-learn.pinball.sh}"
+      # host:port of the API, resolved on a network this container is attached to.
+      BACKEND: "${BACKEND:-pinball-api:8787}"
+
+    expose:
+      - "80"
+
+    networks:
+      - reverse-proxy-network
+
+    # Answers on any Host, so it does not depend on the backend being up.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Not using a proxy? Drop the network above and publish a port instead:
+    # ports:
+    #   - "8080:80"

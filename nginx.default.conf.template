@@ -1,11 +1,21 @@
 # Rendered by the nginx image's envsubst at container start.
-#   APP_HOST     the host the app itself is served on, e.g. app.pinball.sh
-#   BACKEND      host:port of the API container, e.g. backend:8787
+#   APP_HOST   the host the app itself is served on, e.g. learn.pinball.sh
+#   BACKEND    host:port of the API container, e.g. pinball-api:8787
+#   RESOLVER   DNS for runtime upstream lookups; 127.0.0.11 is Docker's own
 #
 # Two server blocks, because two different things live behind this proxy: the
 # single-page app, and every learner's published site. A published site is served
 # entirely by the backend, which resolves the handle from the Host header — so the
-# Host header has to survive the hop.
+# Host header has to survive every hop, here and in whatever sits in front.
+#
+# Note envsubst only replaces the ${VAR} names it is given, so nginx's own $host,
+# $remote_addr and $backend are left alone.
+
+# Resolve the upstream per request rather than once at startup. With a literal
+# hostname in proxy_pass, nginx refuses to start at all if the backend is not yet
+# resolvable ("host not found in upstream"), which turns an ordinary restart order
+# into a crash loop. Going through a variable defers the lookup to request time.
+resolver ${RESOLVER} valid=10s ipv6=off;
 
 server {
     listen 80;
@@ -14,14 +24,17 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
+    # 8MB image uploads (see MAX_BYTES in the backend's storage.ts).
+    client_max_body_size 8m;
+
     location /api/ {
-        proxy_pass http://${BACKEND};
+        set $api "http://${BACKEND}";
+        proxy_pass $api;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
-        client_max_body_size 8m;
     }
 
     # Hashed asset filenames change whenever their contents do.
@@ -43,8 +56,17 @@ server {
     listen 80 default_server;
     server_name _;
 
+    # Container liveness. Deliberately in this block so it answers on any Host,
+    # including 127.0.0.1, and does not depend on the backend being reachable.
+    location = /healthz {
+        access_log off;
+        add_header Content-Type text/plain;
+        return 200 "ok\n";
+    }
+
     location / {
-        proxy_pass http://${BACKEND};
+        set $site "http://${BACKEND}";
+        proxy_pass $site;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
