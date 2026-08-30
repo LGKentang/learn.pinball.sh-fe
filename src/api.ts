@@ -52,11 +52,42 @@ export const REVISION_LABEL: Record<RevisionKind, string> = {
 
 export interface Book {
   id: string;
+  user_id: string;
   title: string;
   intent: string | null;
+  /** Set together: a book is public exactly when published_at is not null. */
+  slug: string | null;
+  published_at: string | null;
   created_at: string;
   updated_at: string;
   archived_at: string | null;
+}
+
+export interface Me {
+  id: string;
+  email: string;
+  name: string | null;
+  avatar_url: string | null;
+  /** The subdomain their published books live on. Null until claimed. */
+  handle: string | null;
+  bio: string | null;
+  is_admin: boolean;
+  can_publish: boolean;
+  site_url: string | null;
+}
+
+export interface AuthConfig {
+  google: boolean;
+  /** True only in local development with PINBALL_DEV_LOGIN set. */
+  dev: boolean;
+  base_domain: string;
+}
+
+export interface PublishResult {
+  published: boolean;
+  slug: string | null;
+  published_at?: string | null;
+  url: string | null;
 }
 
 export interface BookSummary extends Book {
@@ -153,11 +184,31 @@ export interface QuestionDetail {
   sources: { id: string; kind: string; title: string; locator: string | null; excerpt: string | null }[];
 }
 
+/** Thrown on 401 so the shell can swap in the sign-in screen instead of an error. */
+export class NotSignedIn extends Error {
+  constructor() {
+    super('sign in to continue');
+    this.name = 'NotSignedIn';
+  }
+}
+
+/** Set by App so any 401 anywhere drops the whole app back to the sign-in screen. */
+let onSignedOut: (() => void) | null = null;
+export const setSignedOutHandler = (fn: (() => void) | null) => {
+  onSignedOut = fn;
+};
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     ...init,
+    // The session is an httpOnly cookie; nothing here reads or sends a token.
+    credentials: 'same-origin',
     headers: init?.body ? { 'content-type': 'application/json' } : undefined,
   });
+  if (res.status === 401) {
+    onSignedOut?.();
+    throw new NotSignedIn();
+  }
   if (res.status === 204) return undefined as T;
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((body as { error?: string }).error ?? `request failed (${res.status})`);
@@ -180,6 +231,18 @@ export async function uploadImage(file: File | Blob): Promise<{ url: string; byt
 }
 
 export const api = {
+  /* ------------------------------------------------------------------ auth */
+  authConfig: () => req<AuthConfig>('/auth/config'),
+  me: () => req<{ user: Me | null }>('/me'),
+  updateMe: (patch: { handle?: string; bio?: string | null; name?: string }) =>
+    req<{ user: Me }>('/me', { method: 'PATCH', body: JSON.stringify(patch) }),
+  checkHandle: (handle: string) =>
+    req<{ handle: string; available: boolean; reason?: string; url?: string }>(
+      `/handles/${encodeURIComponent(handle)}`,
+    ),
+  devLogin: () => post<{ user: Me }>('/auth/dev'),
+  logout: () => post<{ ok: true }>('/auth/logout'),
+
   books: () => req<BookSummary[]>('/books'),
   book: (id: string) => req<BookDetail>(`/books/${id}`),
   createBook: (title: string, intent: string | null) =>
@@ -187,6 +250,8 @@ export const api = {
   updateBook: (id: string, patch: { title?: string; intent?: string | null }) =>
     req<Book>(`/books/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   deleteBook: (id: string) => req<void>(`/books/${id}`, { method: 'DELETE' }),
+  publishBook: (id: string, input: { published: boolean; slug?: string }) =>
+    post<PublishResult>(`/books/${id}/publish`, input),
 
   question: (id: string) => req<QuestionDetail>(`/questions/${id}`),
   questionIndex: () => req<IndexedQuestion[]>('/questions'),

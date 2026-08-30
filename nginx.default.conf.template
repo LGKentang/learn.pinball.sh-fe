@@ -1,0 +1,54 @@
+# Rendered by the nginx image's envsubst at container start.
+#   APP_HOST     the host the app itself is served on, e.g. app.pinball.sh
+#   BACKEND      host:port of the API container, e.g. backend:8787
+#
+# Two server blocks, because two different things live behind this proxy: the
+# single-page app, and every learner's published site. A published site is served
+# entirely by the backend, which resolves the handle from the Host header — so the
+# Host header has to survive the hop.
+
+server {
+    listen 80;
+    server_name ${APP_HOST};
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location /api/ {
+        proxy_pass http://${BACKEND};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+        client_max_body_size 8m;
+    }
+
+    # Hashed asset filenames change whenever their contents do.
+    location /assets/ {
+        try_files $uri =404;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    location / {
+        try_files $uri /index.html;
+        add_header Cache-Control "no-cache";
+    }
+}
+
+# Everything else that reaches this origin is a published site: <handle>.<domain>.
+# The backend answers with a 404 page for any host that is not a claimed handle,
+# so this does not need to know the list.
+server {
+    listen 80 default_server;
+    server_name _;
+
+    location / {
+        proxy_pass http://${BACKEND};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+    }
+}

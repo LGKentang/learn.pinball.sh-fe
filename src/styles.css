@@ -802,3 +802,97 @@ h2 { font-size: 15px; margin: 0 0 12px; letter-spacing: -0.01em; }
   text-decoration-color: #ff9b8f80; border-radius: 3px; padding: 1px 0;
   box-shadow: 2px 0 0 #331a1c, -2px 0 0 #331a1c;
 }
+
+/* generic centred dialog, shared by the account panel */
+.modal-scrim {
+  position: fixed; inset: 0; z-index: 60; display: grid; place-items: center;
+  padding: 28px; background: #05070ba8; backdrop-filter: blur(6px);
+  animation: scrim-in 120ms ease-out;
+}
+@keyframes scrim-in { from { opacity: 0 } to { opacity: 1 } }
+.modal {
+  width: 100%; max-height: min(88vh, 900px); overflow: auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  padding: 22px 24px; box-shadow: 0 24px 60px #00000066;
+}
+@media (max-width: 640px) {
+  .modal-scrim { padding: 0; place-items: stretch; }
+  .modal { max-height: 100vh; border-radius: 0; border: 0; }
+}
+
+/* ------------------------------------------------------------- accounts */
+
+.boot { min-height: 100vh; background: var(--bg); }
+
+.signin {
+  min-height: 100vh; display: grid; place-items: center; padding: 24px;
+}
+.signin-card {
+  width: 100%; max-width: 430px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 14px; padding: 30px 28px 24px;
+}
+.signin-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 26px; }
+.signin-brand strong { display: block; font-size: 15px; letter-spacing: -0.01em; }
+.signin-brand small { color: var(--dimmer); font-family: var(--mono); font-size: 11px; }
+.signin h1 { font-size: 22px; line-height: 1.25; margin: 0 0 10px; letter-spacing: -0.02em; }
+.signin p.muted { font-size: 14px; line-height: 1.6; margin: 0; }
+.signin-actions { margin-top: 24px; display: grid; gap: 10px; }
+.signin-actions .btn { width: 100%; justify-content: center; padding: 11px 14px; font-size: 14px; }
+.btn.google {
+  background: #fff; border-color: #fff; color: #1f2430; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 10px;
+}
+.btn.google:hover { background: #eef1f6; border-color: #eef1f6; }
+.signin-error {
+  margin-top: 18px; padding: 10px 12px; border-radius: 8px; font-size: 13px; line-height: 1.5;
+  background: #ff6b4a1a; border: 1px solid #ff6b4a55; color: #ffb4a0;
+}
+.signin-foot { margin: 22px 0 0; padding-top: 16px; border-top: 1px solid var(--line-soft); }
+
+/* the avatar button in the top bar */
+.account-btn {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 8px;
+  background: transparent; border: 1px solid transparent; border-radius: 999px;
+  padding: 4px 12px 4px 4px; cursor: pointer; color: var(--dim); font: inherit; font-size: 13px;
+}
+.account-btn:hover { background: var(--panel-2); border-color: var(--line); color: var(--text); }
+.avatar { width: 26px; height: 26px; border-radius: 50%; flex: none; display: block; }
+.avatar.fallback {
+  display: grid; place-items: center; background: var(--accent); color: #14161c;
+  font-weight: 700; font-size: 12px;
+}
+.avatar.lg { width: 40px; height: 40px; font-size: 16px; }
+.account-btn .who { max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* account modal */
+.modal.account { max-width: 560px; display: grid; gap: 22px; }
+.modal.account section { display: block; }
+.modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.modal-foot { border-top: 1px solid var(--line-soft); padding-top: 14px; }
+.site-claimed {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+}
+.site-claimed a { color: var(--green); text-decoration: none; }
+.site-claimed a:hover { text-decoration: underline; }
+.handle-row { display: flex; align-items: center; gap: 8px; }
+.handle-row .field { flex: 1; }
+.small.ok { color: var(--green); }
+.small.bad { color: #ff9d86; }
+.publish-list { display: grid; gap: 6px; }
+.publish-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 9px 11px; border: 1px solid var(--line-soft); border-radius: 8px;
+}
+.publish-row.live { border-color: #4ec9a055; background: #4ec9a00d; }
+.publish-row .pr-main { min-width: 0; display: grid; gap: 2px; }
+.publish-row .t { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.publish-row .s { font-size: 12px; color: var(--dim); }
+.publish-row a.s { color: var(--green); text-decoration: none; }
+.publish-row a.s:hover { text-decoration: underline; }
+.btn.small { padding: 5px 10px; font-size: 12px; }
+.live-dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green); margin-left: 8px; vertical-align: middle;
+  box-shadow: 0 0 8px var(--green);
+}

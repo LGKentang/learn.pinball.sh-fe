@@ -19,6 +19,8 @@ interface Hit {
   title: string;
   sub: string;
   state?: State;
+  /** Books only: shown with a live marker when the book has a public page. */
+  published?: boolean;
 }
 
 /**
@@ -76,6 +78,7 @@ export function Books({ go }: { go: (h: string) => void }) {
       .map((b) => ({
         key: `b-${b.id}`,
         bookId: b.id,
+        published: !!b.published_at,
         title: b.title,
         sub: b.intent ?? `${b.question_count} question${b.question_count === 1 ? '' : 's'}`,
       }));
@@ -210,7 +213,10 @@ export function Books({ go }: { go: (h: string) => void }) {
                   onMouseEnter={() => setSel(i)}
                   onClick={() => open(h)}
                 >
-                  <span className="t">{h.title}</span>
+                  <span className="t">
+                    {h.title}
+                    {h.published && <i className="live-dot" title="Published on your site" />}
+                  </span>
                   <span className="s">{h.sub}</span>
                   {st && (
                     <span className="meter">

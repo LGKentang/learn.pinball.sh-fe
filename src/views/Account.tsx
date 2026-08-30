@@ -1,0 +1,260 @@
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { api, type AuthConfig, type BookSummary, type Me } from '../api';
+
+/**
+ * Account panel: who you are, the handle your published site lives on, and which
+ * books are on it.
+ *
+ * Claiming a handle is deliberately a one-way door — every published URL contains
+ * it, and letting someone change it would break other people's links and free the
+ * old name for whoever wanted to impersonate them.
+ */
+export function Account({
+  me,
+  config,
+  onClose,
+  onChange,
+}: {
+  me: Me;
+  config: AuthConfig | null;
+  onClose: () => void;
+  onChange: (me: Me) => void;
+}) {
+  const [books, setBooks] = useState<BookSummary[]>([]);
+  const [handle, setHandle] = useState(me.handle ?? '');
+  const [check, setCheck] = useState<{ available: boolean; reason?: string; url?: string } | null>(
+    null,
+  );
+  const [bio, setBio] = useState(me.bio ?? '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  const timer = useRef<number>(0);
+
+  useEffect(() => {
+    void api.books().then(setBooks).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    addEventListener('keydown', onKey);
+    return () => removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  // Debounced availability check, so typing a handle is not trial and error.
+  useEffect(() => {
+    if (me.handle) return;
+    const value = handle.trim().toLowerCase();
+    if (value.length < 3) {
+      setCheck(null);
+      return;
+    }
+    clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      void api
+        .checkHandle(value)
+        .then(setCheck)
+        .catch(() => setCheck(null));
+    }, 300);
+    return () => clearTimeout(timer.current);
+  }, [handle, me.handle]);
+
+  async function claim() {
+    const value = handle.trim().toLowerCase();
+    if (!value) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { user } = await api.updateMe({ handle: value });
+      onChange(user);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'could not claim that handle');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveBio() {
+    setBusy(true);
+    setError(null);
+    try {
+      const { user } = await api.updateMe({ bio: bio.trim() || null });
+      onChange(user);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'could not save');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function togglePublish(book: BookSummary) {
+    setError(null);
+    const wasPublished = !!book.published_at;
+    try {
+      const res = await api.publishBook(book.id, { published: !wasPublished });
+      setBooks((bs) =>
+        bs.map((b) =>
+          b.id === book.id
+            ? { ...b, published_at: res.published ? (res.published_at ?? new Date().toISOString()) : null, slug: res.slug }
+            : b,
+        ),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'could not change that');
+    }
+  }
+
+  function copy(url: string) {
+    void navigator.clipboard?.writeText(url);
+    setCopied(url);
+    setTimeout(() => setCopied(null), 1600);
+  }
+
+  const domain = config?.base_domain ?? 'pinball.sh';
+  const published = books.filter((b) => b.published_at);
+
+  return createPortal(
+    <div className="modal-scrim" onMouseDown={onClose}>
+      <div
+        className="modal account"
+        role="dialog"
+        aria-label="Account"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <header className="modal-head">
+          <div className="row" style={{ gap: 10, alignItems: 'center' }}>
+            {me.avatar_url ? (
+              <img className="avatar lg" src={me.avatar_url} alt="" referrerPolicy="no-referrer" />
+            ) : (
+              <span className="avatar lg fallback">{(me.name ?? me.email)[0]?.toUpperCase()}</span>
+            )}
+            <div>
+              <strong>{me.name ?? me.email}</strong>
+              <div className="small dimmer">{me.email}</div>
+            </div>
+          </div>
+          <button className="btn ghost" onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+        </header>
+
+        {error && <div className="signin-error">{error}</div>}
+
+        <section>
+          <p className="eyebrow">Your site</p>
+          {me.handle ? (
+            <div className="site-claimed">
+              <a href={me.site_url ?? '#'} target="_blank" rel="noreferrer noopener" className="mono">
+                {me.handle}.{domain}
+              </a>
+              <button className="btn ghost small" onClick={() => copy(me.site_url ?? '')}>
+                {copied === me.site_url ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+          ) : (
+            <>
+              <p className="small dimmer" style={{ margin: '0 0 10px' }}>
+                Pick the address your published books will live on. It cannot be changed later —
+                every published link contains it.
+              </p>
+              <div className="handle-row">
+                <input
+                  className="field"
+                  placeholder="your-name"
+                  value={handle}
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  onChange={(e) => setHandle(e.target.value.toLowerCase())}
+                  onKeyDown={(e) => e.key === 'Enter' && check?.available && void claim()}
+                />
+                <span className="mono dimmer">.{domain}</span>
+              </div>
+              {check && (
+                <p className={`small ${check.available ? 'ok' : 'bad'}`}>
+                  {check.available ? `${handle}.${domain} is available` : check.reason}
+                </p>
+              )}
+              <button
+                className="btn primary"
+                style={{ marginTop: 10 }}
+                disabled={busy || !check?.available}
+                onClick={() => void claim()}
+              >
+                Claim this address
+              </button>
+            </>
+          )}
+        </section>
+
+        <section>
+          <p className="eyebrow">Bio</p>
+          <textarea
+            className="field"
+            rows={2}
+            placeholder="One line about what you are working to understand."
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+            onBlur={() => bio.trim() !== (me.bio ?? '') && void saveBio()}
+          />
+          <p className="small dimmer">Shown at the top of your published site.</p>
+        </section>
+
+        <section>
+          <p className="eyebrow">
+            Published books <span className="dimmer">— {published.length} of {books.length}</span>
+          </p>
+          {!me.handle && (
+            <p className="small dimmer">Claim an address above before publishing anything.</p>
+          )}
+          <div className="publish-list">
+            {books.map((b) => {
+              const live = !!b.published_at;
+              const url = live && me.handle ? `https://${me.handle}.${domain}/${b.slug}` : null;
+              return (
+                <div key={b.id} className={`publish-row ${live ? 'live' : ''}`}>
+                  <div className="pr-main">
+                    <span className="t">{b.title}</span>
+                    {url ? (
+                      <a className="s mono" href={url} target="_blank" rel="noreferrer noopener">
+                        /{b.slug}
+                      </a>
+                    ) : (
+                      <span className="s dimmer">
+                        {b.question_count} question{b.question_count === 1 ? '' : 's'} · private
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    className={`btn small ${live ? '' : 'primary'}`}
+                    disabled={!me.handle}
+                    onClick={() => void togglePublish(b)}
+                  >
+                    {live ? 'Unpublish' : 'Publish'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <p className="small dimmer" style={{ marginTop: 10 }}>
+            Published pages show each question and your current answer. Your revision history,
+            drill ratings and parked rabbit holes stay private.
+          </p>
+        </section>
+
+        <footer className="modal-foot">
+          <button
+            className="btn ghost"
+            onClick={() => {
+              void api.logout().finally(() => location.reload());
+            }}
+          >
+            Sign out
+          </button>
+        </footer>
+      </div>
+    </div>,
+    document.body,
+  );
+}

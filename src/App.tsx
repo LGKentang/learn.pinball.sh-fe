@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api } from './api';
+import { api, setSignedOutHandler, type AuthConfig, type Me } from './api';
+import { SignIn } from './views/SignIn';
+import { Account } from './views/Account';
 import { Books } from './views/Books';
 import { BookView } from './views/Book';
 import { Drill } from './views/Drill';
@@ -40,6 +42,25 @@ export default function App() {
   const [route, setRoute] = useState<Route>(() => parse(location.hash));
   const [due, setDue] = useState(0);
   const [currentBookId, setCurrentBookId] = useState<string | null>(readLastBookId);
+  const [me, setMe] = useState<Me | null>(null);
+  const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
+  const [ready, setReady] = useState(false);
+  const [showAccount, setShowAccount] = useState(false);
+
+  // Who is signed in decides what the whole shell renders, so it is resolved once
+  // here rather than by each view discovering its own 401.
+  useEffect(() => {
+    setSignedOutHandler(() => setMe(null));
+    void Promise.all([
+      api.me().then((r) => r.user).catch(() => null),
+      api.authConfig().catch(() => null),
+    ]).then(([user, cfg]) => {
+      setMe(user);
+      setAuthConfig(cfg);
+      setReady(true);
+    });
+    return () => setSignedOutHandler(null);
+  }, []);
 
   useEffect(() => {
     const onHash = () => setRoute(parse(location.hash));
@@ -66,7 +87,9 @@ export default function App() {
       .catch(() => setDue(0));
   }, []);
 
-  useEffect(refreshDue, [refreshDue, route.name]);
+  useEffect(() => {
+    if (me) refreshDue();
+  }, [refreshDue, route.name, me]);
 
   const go = useCallback((hash: string) => {
     location.hash = hash;
@@ -74,6 +97,11 @@ export default function App() {
 
   const exploreHref = currentBookId ? `#/b/${currentBookId}` : '#/books';
   const mapHref = currentBookId ? `#/b/${currentBookId}/map` : '#/books';
+
+  // Nothing renders until we know: flashing the app and then replacing it with a
+  // sign-in screen looks like a bug and fires a round of doomed requests.
+  if (!ready) return <div className="boot" aria-busy="true" />;
+  if (!me) return <SignIn onSignedIn={setMe} />;
 
   return (
     <div className="app">
@@ -98,7 +126,29 @@ export default function App() {
             {due > 0 && <span className="count">{due}</span>}
           </a>
         </nav>
+
+        <button
+          className="account-btn"
+          onClick={() => setShowAccount(true)}
+          title={me.handle ? `${me.handle}.${authConfig?.base_domain ?? 'pinball.sh'}` : 'Account'}
+        >
+          {me.avatar_url ? (
+            <img className="avatar" src={me.avatar_url} alt="" referrerPolicy="no-referrer" />
+          ) : (
+            <span className="avatar fallback">{(me.name ?? me.email)[0]?.toUpperCase()}</span>
+          )}
+          <span className="who mono">{me.handle ?? me.name ?? me.email.split('@')[0]}</span>
+        </button>
       </header>
+
+      {showAccount && (
+        <Account
+          me={me}
+          config={authConfig}
+          onClose={() => setShowAccount(false)}
+          onChange={setMe}
+        />
+      )}
 
       {route.name === 'canvas' ? (
         <Canvas go={go} bookId={route.bookId} selectedId={route.questionId} />
