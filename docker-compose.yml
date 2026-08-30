@@ -2,9 +2,11 @@
 #
 #   docker compose up -d --build
 #
-# No ports are published. The container joins an existing reverse-proxy network
-# and is reached by name, so TLS, certificates and routing stay where you already
-# handle them. Create the network once if it does not exist yet:
+# Nothing is published to the host and there is no `expose:` -- that directive is
+# documentation only, and containers sharing a network already reach every port on
+# each other. The container joins your reverse-proxy network and is reached by
+# name on :80, so TLS, certificates and routing stay where you handle them.
+# Create the network once if it does not exist yet:
 #
 #   docker network create reverse-proxy-network
 #
@@ -41,9 +43,6 @@ services:
       # host:port of the API, resolved on a network this container is attached to.
       BACKEND: "${BACKEND:-pinball-api:8787}"
 
-    expose:
-      - "80"
-
     networks:
       - reverse-proxy-network
 
@@ -61,6 +60,6 @@ services:
         max-size: "10m"
         max-file: "3"
 
-    # Not using a proxy? Drop the network above and publish a port instead:
+    # Not using a proxy? Publish a port instead:
     # ports:
     #   - "8080:80"
