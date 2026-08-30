@@ -306,6 +306,8 @@ function QuestionPane({
   const [asDiff, setAsDiff] = useState(true);
   const [linking, setLinking] = useState(false);
   const [linked, setLinked] = useState(0);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [title, setTitle] = useState(q.title);
 
   useEffect(() => {
     setDraft(q.understanding ?? '');
@@ -316,7 +318,9 @@ function QuestionPane({
     setShowTrail(false);
     setLinking(false);
     setLinked(0);
-  }, [q.id, q.understanding]);
+    setTitle(q.title);
+    setEditingTitle(false);
+  }, [q.id, q.understanding, q.title]);
 
   async function save() {
     try {
@@ -343,6 +347,18 @@ function QuestionPane({
     }
   }
 
+  /**
+   * Renaming is a plain edit, not a revision: the question is the same question,
+   * and only `understanding` carries history (Invariant 1). Sharpening the wording
+   * of what you are asking should not look like changing your mind about the answer.
+   */
+  async function commitTitle() {
+    const t = title.trim();
+    setEditingTitle(false);
+    if (!t || t === q.title) return setTitle(q.title);
+    await patch({ title: t });
+  }
+
   return (
     <>
       <nav className="crumbs">
@@ -355,7 +371,36 @@ function QuestionPane({
         <span className="dimmer">you are here</span>
       </nav>
 
-      <h1 className="q-title">{q.title}</h1>
+      {editingTitle ? (
+        <textarea
+          autoFocus
+          className="field q-title-input"
+          rows={2}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={() => void commitTitle()}
+          onKeyDown={(e) => {
+            // Enter commits; a question title is one line, so newlines are not wanted.
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              void commitTitle();
+            }
+            if (e.key === 'Escape') {
+              setTitle(q.title);
+              setEditingTitle(false);
+            }
+          }}
+        />
+      ) : (
+        <button
+          className="title-edit q-title-edit"
+          onClick={() => setEditingTitle(true)}
+          title="Rewrite this question"
+        >
+          <h1 className="q-title">{q.title}</h1>
+          <span className="pencil">✎</span>
+        </button>
+      )}
 
       <div className="row" style={{ flexWrap: 'wrap', gap: 10, marginBottom: 4 }}>
         <StateBadge state={q.state} />
