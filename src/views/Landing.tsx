@@ -454,17 +454,20 @@ function LoopGraph({ phase }: { phase: { dir: 1 | -1; idx: number } | null }) {
       <path d={ringPath} className="lg-track" />
       {phase && (
         <>
+          {/* cx/cy stay at 0: the path string already carries the ring's absolute
+              position, so the shape's own geometry must not add a second offset
+              on top of offset-path or the dot renders off in the wrong spot. */}
           <circle
             r={5}
-            cx={cx}
-            cy={cy}
+            cx={0}
+            cy={0}
             className="lg-signal forward"
             style={{ offsetPath: `path('${ringPath}')` } as CSSProperties}
           />
           <circle
             r={5}
-            cx={cx}
-            cy={cy}
+            cx={0}
+            cy={0}
             className="lg-signal backprop"
             style={{ offsetPath: `path('${ringPath}')` } as CSSProperties}
           />
