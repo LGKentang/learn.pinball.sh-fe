@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, setSignedOutHandler, type AuthConfig, type Me } from './api';
+import { Landing } from './views/Landing';
 import { SignIn } from './views/SignIn';
 import { Account } from './views/Account';
 import { Books } from './views/Books';
@@ -46,6 +47,11 @@ export default function App() {
   const [authConfig, setAuthConfig] = useState<AuthConfig | null>(null);
   const [ready, setReady] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
+  // A failed OAuth round trip bounces back here with ?auth_error=… — that error
+  // belongs on the sign-in screen, not buried behind the marketing page again.
+  const [showSignIn, setShowSignIn] = useState(
+    () => new URLSearchParams(location.search).has('auth_error'),
+  );
 
   // Who is signed in decides what the whole shell renders, so it is resolved once
   // here rather than by each view discovering its own 401.
@@ -101,7 +107,13 @@ export default function App() {
   // Nothing renders until we know: flashing the app and then replacing it with a
   // sign-in screen looks like a bug and fires a round of doomed requests.
   if (!ready) return <div className="boot" aria-busy="true" />;
-  if (!me) return <SignIn onSignedIn={setMe} />;
+  if (!me) {
+    return showSignIn ? (
+      <SignIn onSignedIn={setMe} />
+    ) : (
+      <Landing onContinue={() => setShowSignIn(true)} />
+    );
+  }
 
   return (
     <div className="app">
