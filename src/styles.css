@@ -131,8 +131,13 @@ h2 { font-size: 15px; margin: 0 0 12px; letter-spacing: -0.01em; }
   border: 1px dashed #4a3d22; border-radius: 20px; padding: 1px 8px;
 }
 
-.meter { display: flex; height: 5px; border-radius: 3px; overflow: hidden; background: var(--line-soft); }
+.meter { display: flex; align-items: center; gap: 8px; }
+.meter .bar-track {
+  flex: 1 1 auto; min-width: 0; display: flex; height: 5px;
+  border-radius: 3px; overflow: hidden; background: var(--line-soft);
+}
 .meter i { display: block; height: 100%; }
+.meter em { flex: 0 0 auto; }
 
 .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; font-size: 12px; color: var(--dim); }
 .legend span { display: flex; align-items: center; gap: 6px; }
@@ -617,13 +622,11 @@ h2 { font-size: 15px; margin: 0 0 12px; letter-spacing: -0.01em; }
 }
 .picker-row.topic .t { font-weight: 600; }
 
-.picker-row .meter {
-  display: flex; align-items: center; gap: 8px; margin-top: 10px; height: 5px;
-}
+.picker-row .meter { margin-top: 10px; height: 5px; }
 .picker-row .meter i { display: block; height: 5px; border-radius: 2px; }
 .picker-row .meter em {
   font-family: var(--mono); font-style: normal; font-size: 10px;
-  color: var(--dimmer); margin-left: auto; line-height: 1;
+  color: var(--dimmer); line-height: 1;
 }
 
 .picker kbd {

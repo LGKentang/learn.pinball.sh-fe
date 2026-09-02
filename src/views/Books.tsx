@@ -220,12 +220,14 @@ export function Books({ go }: { go: (h: string) => void }) {
                   <span className="s">{h.sub}</span>
                   {st && (
                     <span className="meter">
-                      {(Object.keys(st.by) as State[]).map((k) => (
-                        <i
-                          key={k}
-                          style={{ background: COLOR[k], width: `${((st.by[k] ?? 0) / st.total) * 100}%` }}
-                        />
-                      ))}
+                      <span className="bar-track">
+                        {(Object.keys(st.by) as State[]).map((k) => (
+                          <i
+                            key={k}
+                            style={{ background: COLOR[k], width: `${((st.by[k] ?? 0) / st.total) * 100}%` }}
+                          />
+                        ))}
+                      </span>
                       <em>{st.total}</em>
                     </span>
                   )}
