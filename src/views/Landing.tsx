@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 
 /**
  * What a visitor sees before they sign in. The graphs here aren't decoration
@@ -7,13 +7,15 @@ import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 
  * example questions PRODUCT.md uses to make the domain-agnostic claim concrete
  * rather than asserted.
  */
+// One real question, followed all the way around. Each step is a beat in the
+// same running example, not just an abstract stage name.
 const LOOP = [
-  { label: 'Ask a question', color: 'var(--dim)' },
-  { label: 'Write what you believe', color: 'var(--amber)' },
-  { label: 'Discover a gap', color: 'var(--blue)' },
-  { label: 'Follow the subquestion', color: 'var(--violet)' },
-  { label: 'Return, and revise', color: 'var(--green)' },
-  { label: 'Explain it from memory', color: 'var(--accent)' },
+  { label: 'Ask a question', color: 'var(--dim)', example: 'Why does Kubernetes need readiness probes?' },
+  { label: 'Write what you believe', color: 'var(--amber)', example: "So a pod stays out of rotation until it's ready." },
+  { label: 'Discover a gap', color: 'var(--blue)', example: "Wait, doesn't readiness also gate rollouts?" },
+  { label: 'Follow the subquestion', color: 'var(--violet)', example: 'How does a Deployment decide a pod is ready?' },
+  { label: 'Return, and revise', color: 'var(--green)', example: "Readiness isn't liveness. Fixed the mixup." },
+  { label: 'Explain it from memory', color: 'var(--accent)', example: 'Explained cold in Drill, no notes.' },
 ];
 
 type IconKind = 'revise' | 'brain' | 'nodes' | 'radiate';
@@ -54,6 +56,51 @@ const EXAMPLES = [
   'Why do central banks raise rates during inflation?',
 ];
 
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const mq = matchMedia('(prefers-reduced-motion: reduce)');
+    setReduced(mq.matches);
+    const onChange = () => setReduced(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return reduced;
+}
+
+/**
+ * Drives the loop ring: a forward "firing" lap around all six steps, then a
+ * "backprop" lap back the way it came, on repeat. `idx` is whichever step the
+ * signal is over right now; `dir` says which direction it's currently moving.
+ */
+function useLoopPhase(count: number, paused: boolean) {
+  const [phase, setPhase] = useState<{ dir: 1 | -1; idx: number }>({ dir: 1, idx: 0 });
+  useEffect(() => {
+    if (paused) return;
+    let raf: number;
+    const cycleMs = 7200;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const t = (now - start) % cycleMs;
+      let dir: 1 | -1;
+      let local: number;
+      if (t < cycleMs / 2) {
+        dir = 1;
+        local = t / (cycleMs / 2);
+      } else {
+        dir = -1;
+        local = 1 - (t - cycleMs / 2) / (cycleMs / 2);
+      }
+      const idx = Math.min(count - 1, Math.max(0, Math.floor(local * count)));
+      setPhase((p) => (p.dir === dir && p.idx === idx ? p : { dir, idx }));
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [count, paused]);
+  return phase;
+}
+
 /** Fades a section in the first time it scrolls into view, then leaves it alone. */
 function useReveal<T extends HTMLElement>() {
   const ref = useRef<T | null>(null);
@@ -92,6 +139,8 @@ function useScrollProgress() {
 
 export function Landing({ onContinue }: { onContinue: () => void }) {
   const progress = useScrollProgress();
+  const reducedMotion = usePrefersReducedMotion();
+  const loopPhase = useLoopPhase(LOOP.length, reducedMotion);
   const loopRef = useReveal<HTMLElement>();
   const principlesRef = useReveal<HTMLElement>();
   const mapRef = useReveal<HTMLElement>();
@@ -102,13 +151,15 @@ export function Landing({ onContinue }: { onContinue: () => void }) {
       <div className="landing-progress" style={{ transform: `scaleX(${progress})` }} />
 
       <header className="landing-nav">
-        <div className="brand">
-          <i className="ball" />
-          Pinball Learn
+        <div className="landing-nav-inner">
+          <div className="brand">
+            <i className="ball" />
+            Pinball Learn
+          </div>
+          <button className="btn ghost small" onClick={onContinue}>
+            Sign in
+          </button>
         </div>
-        <button className="btn ghost small" onClick={onContinue}>
-          Sign in
-        </button>
       </header>
 
       <section className="landing-hero">
@@ -137,14 +188,32 @@ export function Landing({ onContinue }: { onContinue: () => void }) {
       <section className="landing-loop reveal" ref={loopRef}>
         <p className="eyebrow landing-section-eyebrow">The loop</p>
         <div className="loop-layout">
-          <LoopGraph />
+          <div className="loop-graph-wrap">
+            <LoopGraph phase={reducedMotion ? null : loopPhase} />
+            {!reducedMotion && (
+              <p className="loop-live mono">
+                <span className={`loop-live-dir ${loopPhase.dir === 1 ? 'fwd' : 'back'}`}>
+                  {loopPhase.dir === 1 ? '→' : '↺'}
+                </span>
+                {LOOP[loopPhase.idx].example}
+              </p>
+            )}
+          </div>
           <div className="loop-side">
             <div className="loop-list">
               {LOOP.map((step, i) => (
-                <div className="loop-item" key={step.label}>
+                <div
+                  className={`loop-item ${
+                    !reducedMotion && loopPhase.idx === i ? (loopPhase.dir === 1 ? 'active' : 'active-back') : ''
+                  }`}
+                  key={step.label}
+                >
                   <span className="loop-num mono">{String(i + 1).padStart(2, '0')}</span>
                   <span className="loop-dot" style={{ background: step.color }} />
-                  <span className="loop-label">{step.label}</span>
+                  <div className="loop-text">
+                    <span className="loop-label">{step.label}</span>
+                    <span className="loop-example">{step.example}</span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -248,7 +317,7 @@ function PrincipleIcon({ kind, color }: { kind: IconKind; color: string }) {
       </svg>
     );
   }
-  // 'radiate' — one center, many directions: the same model reaching into any subject.
+  // 'radiate': one center, many directions, the same model reaching into any subject.
   return (
     <svg {...box}>
       {[0, 60, 120, 180, 240, 300].map((deg) => {
@@ -265,18 +334,19 @@ function PrincipleIcon({ kind, color }: { kind: IconKind; color: string }) {
 }
 
 /**
- * Five nodes, loosely constellated. Not a real layout, just the real visual grammar.
- * Move the mouse over it and your cursor joins the graph as a new question, with a
- * dashed line finding the node it's closest to. It's the same thing the product does
- * with a real question: it lands somewhere, and it's linked to what's nearest.
+ * A small, real worked example (not five blank bars): why 0.999… turns out to equal
+ * 1, broken into the two subquestions that actually settle it. Move the mouse over
+ * it and your cursor joins the graph as a new question, with a dashed line finding
+ * the node it's closest to. It's the same thing the product does with a real
+ * question: it lands somewhere, and it's linked to what's nearest.
  */
 function HeroGraph() {
   const nodes = [
-    { x: 60, y: 150, state: 'exploring', w: 132 },
-    { x: 230, y: 60, state: 'understood', w: 140 },
-    { x: 230, y: 230, state: 'can_explain', w: 118 },
-    { x: 420, y: 130, state: 'unexplored', w: 108 },
-    { x: 420, y: 250, state: 'verified', w: 96 },
+    { x: 40, y: 150, state: 'exploring', w: 170, label: '0.999… = 1 ?' },
+    { x: 235, y: 50, state: 'understood', w: 150, label: '1/3 = 0.333…' },
+    { x: 235, y: 235, state: 'can_explain', w: 140, label: '3 × ⅓ = 1' },
+    { x: 415, y: 125, state: 'unexplored', w: 140, label: 'no gap between' },
+    { x: 415, y: 250, state: 'verified', w: 120, label: 'limits agree' },
   ];
   const edges: [number, number, boolean][] = [
     [0, 1, false],
@@ -297,7 +367,7 @@ function HeroGraph() {
     const rect = svg.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
     setCursor({
-      x: ((e.clientX - rect.left) / rect.width) * 540,
+      x: ((e.clientX - rect.left) / rect.width) * 560,
       y: ((e.clientY - rect.top) / rect.height) * 300,
     });
   };
@@ -318,7 +388,7 @@ function HeroGraph() {
     <svg
       ref={svgRef}
       className="hero-graph"
-      viewBox="0 0 540 300"
+      viewBox="0 0 560 300"
       role="presentation"
       aria-hidden="true"
       onMouseMove={onMove}
@@ -340,6 +410,9 @@ function HeroGraph() {
         <g key={i} className="hg-node" style={{ animationDelay: `${i * 0.5}s` }}>
           <rect x={n.x} y={n.y} width={n.w} height={32} rx={8} />
           <rect x={n.x} y={n.y} width={4} height={32} rx={2} className={`state-fill ${n.state}`} />
+          <text x={n.x + 14} y={n.y + 16} dominantBaseline="middle" className="hg-node-label">
+            {n.label}
+          </text>
         </g>
       ))}
       {cursor && nearest >= 0 && (
@@ -359,8 +432,13 @@ function HeroGraph() {
   );
 }
 
-/** Six nodes on a ring, one flowing into the next, closing back on itself. */
-function LoopGraph() {
+/**
+ * Six nodes on a ring. A signal fires forward around the loop, node by node,
+ * then a second lap runs it back the way it came, the way backprop revises
+ * earlier layers with what a later one found. `phase` (null under reduced
+ * motion) says which node is lit and which direction the signal is moving.
+ */
+function LoopGraph({ phase }: { phase: { dir: 1 | -1; idx: number } | null }) {
   const cx = 140;
   const cy = 140;
   const r = 104;
@@ -369,44 +447,68 @@ function LoopGraph() {
     x: cx + r * Math.cos(angle(i)),
     y: cy + r * Math.sin(angle(i)),
   }));
+  const ringPath = `M ${cx + r} ${cy} A ${r} ${r} 0 1 1 ${cx - r} ${cy} A ${r} ${r} 0 1 1 ${cx + r} ${cy}`;
 
   return (
     <svg className="loop-graph" viewBox="0 0 280 280" role="presentation" aria-hidden="true">
+      <path d={ringPath} className="lg-track" />
+      {phase && (
+        <>
+          <circle
+            r={5}
+            cx={cx}
+            cy={cy}
+            className="lg-signal forward"
+            style={{ offsetPath: `path('${ringPath}')` } as CSSProperties}
+          />
+          <circle
+            r={5}
+            cx={cx}
+            cy={cy}
+            className="lg-signal backprop"
+            style={{ offsetPath: `path('${ringPath}')` } as CSSProperties}
+          />
+        </>
+      )}
       {pts.map((p, i) => {
-        const n = pts[(i + 1) % pts.length];
-        const restart = i === pts.length - 1;
+        const firing = phase?.idx === i && phase.dir === 1;
+        const firingBack = phase?.idx === i && phase.dir === -1;
         return (
-          <path
+          <circle
             key={i}
-            d={`M ${p.x} ${p.y} A ${r} ${r} 0 0 1 ${n.x} ${n.y}`}
-            className={`lg-flow ${restart ? 'restart' : ''}`}
-            style={{ animationDelay: `${i * -0.4}s` }}
+            cx={p.x}
+            cy={p.y}
+            r={7}
+            className={`lg-node ${firing ? 'firing' : ''} ${firingBack ? 'firing-back' : ''}`}
+            style={{ fill: LOOP[i].color, color: LOOP[i].color }}
           />
         );
       })}
-      {pts.map((p, i) => (
-        <circle
-          key={i}
-          cx={p.x}
-          cy={p.y}
-          r={7}
-          className="lg-node"
-          style={{ fill: LOOP[i].color, color: LOOP[i].color, animationDelay: `${i * 0.35}s` }}
-        />
-      ))}
       <circle cx={cx} cy={cy} r={2.5} className="lg-center" />
     </svg>
   );
 }
 
-/** A slightly denser tree, meant to read as "the real map" beside real questions. */
+const STATE_MEANING: Record<string, string> = {
+  unexplored: 'Unexplored: not opened yet',
+  exploring: 'Exploring: still forming an answer',
+  understood: 'Understood: answered once',
+  can_explain: 'Can Explain: from memory, no notes',
+  verified: 'Verified: explained again later, and it held',
+};
+
+/**
+ * The same tree as the first example above, expanded: hover a question to see what
+ * its color actually means. Nothing here is decorative text, it's the one real
+ * legend this page has for the five states used everywhere else on it.
+ */
 function MapGraph() {
   const rows = [
-    { depth: 0, state: 'can_explain', w: 168 },
-    { depth: 1, state: 'understood', w: 200 },
-    { depth: 1, state: 'understood', w: 148 },
-    { depth: 2, state: 'exploring', w: 176 },
-    { depth: 0, state: 'unexplored', w: 132 },
+    { depth: 0, state: 'can_explain', w: 176, label: 'Readiness probes?' },
+    { depth: 1, state: 'understood', w: 210, label: 'pod not ready but healthy?' },
+    { depth: 1, state: 'understood', w: 150, label: 'kubelet checks' },
+    { depth: 2, state: 'exploring', w: 150, label: 'liveness ≠ readiness' },
+    { depth: 0, state: 'unexplored', w: 140, label: 'sidecar probes?' },
   ];
   const rowH = 40;
   // Each row's parent is the nearest earlier row exactly one level shallower, so a
@@ -419,26 +521,41 @@ function MapGraph() {
     return -1;
   });
   const dotY = (i: number) => 12 + i * rowH + 8;
+  const [hover, setHover] = useState<number | null>(null);
 
   return (
-    <svg className="map-graph" viewBox="0 0 320 220" role="presentation" aria-hidden="true">
-      {rows.map((r, i) => {
-        const x = 10 + r.depth * 28;
-        const y = 12 + i * rowH;
-        const pIdx = parentOf[i];
-        return (
-          <g key={i}>
-            {pIdx >= 0 && (
-              <path
-                d={`M ${x - 18} ${dotY(pIdx)} V ${dotY(i)} H ${x - 6}`}
-                className="mg-guide"
-              />
-            )}
-            <circle cx={x} cy={dotY(i)} r={4} className={`state-dot ${r.state}`} />
-            <rect x={x + 12} y={y} width={r.w} height={16} rx={4} className="mg-bar" />
-          </g>
-        );
-      })}
-    </svg>
+    <div className="map-graph-wrap">
+      <svg className="map-graph" viewBox="0 0 320 220" role="presentation" aria-hidden="true">
+        {rows.map((r, i) => {
+          const x = 10 + r.depth * 28;
+          const y = 12 + i * rowH;
+          const pIdx = parentOf[i];
+          const active = hover === i;
+          return (
+            <g
+              key={i}
+              className="mg-row"
+              onMouseEnter={() => setHover(i)}
+              onMouseLeave={() => setHover((h) => (h === i ? null : h))}
+            >
+              {pIdx >= 0 && (
+                <path
+                  d={`M ${x - 18} ${dotY(pIdx)} V ${dotY(i)} H ${x - 6}`}
+                  className="mg-guide"
+                />
+              )}
+              <rect x={x + 12} y={y} width={r.w} height={16} rx={4} className={`mg-bar ${active ? 'active' : ''}`} />
+              <text x={x + 22} y={dotY(i)} dominantBaseline="middle" className={`mg-label ${active ? 'active' : ''}`}>
+                {r.label}
+              </text>
+              <circle cx={x} cy={dotY(i)} r={active ? 5 : 4} className={`state-dot ${r.state} ${active ? 'active' : ''}`} />
+            </g>
+          );
+        })}
+      </svg>
+      <p className={`mg-tip ${hover !== null ? 'show' : ''}`}>
+        {hover !== null ? STATE_MEANING[rows[hover].state] : 'Hover a question to see what its color means.'}
+      </p>
+    </div>
   );
 }
