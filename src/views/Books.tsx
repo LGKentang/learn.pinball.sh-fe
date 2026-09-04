@@ -265,10 +265,10 @@ export function Books({ go }: { go: (h: string) => void }) {
           {libraries.map((lib) => (
             <Shelf
               key={lib.id}
+              libraryId={lib.id}
               title={lib.title}
               count={lib.book_count}
               books={byLibrary.map.get(lib.id) ?? []}
-              libraries={libraries}
               stats={stats}
               go={go}
               onMove={moveBook}
@@ -279,10 +279,10 @@ export function Books({ go }: { go: (h: string) => void }) {
 
           {(byLibrary.unsorted.length > 0 || libraries.length === 0) && (
             <Shelf
+              libraryId={null}
               title="Unsorted"
               count={byLibrary.unsorted.length}
               books={byLibrary.unsorted}
-              libraries={libraries}
               stats={stats}
               go={go}
               onMove={moveBook}
@@ -395,12 +395,16 @@ export function Books({ go }: { go: (h: string) => void }) {
   );
 }
 
-/** One Library's row of book spines, or the "Unsorted" catch-all. */
+/** The drag payload's MIME type: a book id, and only a book id, is ever on the clipboard. */
+const BOOK_DRAG_TYPE = 'application/x-pinball-book-id';
+
+/** One Library's row of book spines, or the "Unsorted" catch-all — a strip-bordered
+ * bin rather than a real shelf, since these books haven't been put anywhere yet. */
 function Shelf({
+  libraryId,
   title,
   count,
   books,
-  libraries,
   stats,
   go,
   onMove,
@@ -408,10 +412,10 @@ function Shelf({
   onDelete,
   unsorted,
 }: {
+  libraryId: string | null;
   title: string;
   count: number;
   books: BookSummary[];
-  libraries: LibrarySummary[];
   stats: (id: string) => { total: number; by: Partial<Record<State, number>> } | null;
   go: (h: string) => void;
   onMove: (bookId: string, libraryId: string | null) => void;
@@ -421,6 +425,7 @@ function Shelf({
 }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(title);
+  const [dragOver, setDragOver] = useState(false);
 
   return (
     <div className="shelf">
@@ -463,13 +468,28 @@ function Shelf({
           </button>
         )}
       </div>
-      <div className="shelf-row">
+      <div
+        className={`shelf-row ${unsorted ? 'shelf-row-unsorted' : ''} ${dragOver ? 'drag-over' : ''}`}
+        onDragOver={(e) => {
+          if (!e.dataTransfer.types.includes(BOOK_DRAG_TYPE)) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          const bookId = e.dataTransfer.getData(BOOK_DRAG_TYPE);
+          if (bookId) onMove(bookId, libraryId);
+        }}
+      >
         {books.length === 0 ? (
-          <p className="shelf-empty small dimmer">Nothing shelved here yet.</p>
+          <p className="shelf-empty small dimmer">
+            {unsorted ? 'Nothing unsorted.' : 'Drag a book here to shelve it.'}
+          </p>
         ) : (
-          books.map((b) => (
-            <Spine key={b.id} book={b} libraries={libraries} stats={stats} go={go} onMove={onMove} />
-          ))
+          books.map((b) => <Spine key={b.id} book={b} stats={stats} go={go} />)
         )}
       </div>
     </div>
@@ -477,20 +497,18 @@ function Shelf({
 }
 
 /** One book as a bookshelf spine: width and height vary per book, and the color
- * bands are that book's own question-state breakdown, most-done state on top. */
+ * bands are that book's own question-state breakdown, most-done state on top.
+ * Drag it onto another shelf to re-shelve it. */
 function Spine({
   book,
-  libraries,
   stats,
   go,
-  onMove,
 }: {
   book: BookSummary;
-  libraries: LibrarySummary[];
   stats: (id: string) => { total: number; by: Partial<Record<State, number>> } | null;
   go: (h: string) => void;
-  onMove: (bookId: string, libraryId: string | null) => void;
 }) {
+  const [dragging, setDragging] = useState(false);
   const h = hash(book.id);
   const width = 34 + (h % 22);
   const height = 148 + ((h >> 5) % 46);
@@ -512,28 +530,22 @@ function Spine({
   }
 
   return (
-    <div className="spine-slot" style={{ width }}>
+    <div className={`spine-slot ${dragging ? 'dragging' : ''}`} style={{ width }}>
       <button
         className="spine"
         style={{ height, background: gradient }}
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.setData(BOOK_DRAG_TYPE, book.id);
+          e.dataTransfer.effectAllowed = 'move';
+          setDragging(true);
+        }}
+        onDragEnd={() => setDragging(false)}
         onClick={() => go(`#/b/${book.id}`)}
         title={book.title}
       >
         <span className="spine-title">{book.title}</span>
       </button>
-      <select
-        className="spine-move"
-        value={book.library_id ?? ''}
-        onChange={(e) => onMove(book.id, e.target.value || null)}
-        title="Move to library"
-      >
-        <option value="">Unsorted</option>
-        {libraries.map((l) => (
-          <option key={l.id} value={l.id}>
-            {l.title}
-          </option>
-        ))}
-      </select>
     </div>
   );
 }
