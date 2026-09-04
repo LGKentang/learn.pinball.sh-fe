@@ -97,8 +97,17 @@ export default function App() {
     if (me) refreshDue();
   }, [refreshDue, route.name, me]);
 
-  const go = useCallback((hash: string) => {
-    location.hash = hash;
+  // `replace: true` lands on a hash without pushing a history entry — used for
+  // redirects that happen without the user asking for them (landing on a book's
+  // first question), so the back button steps to what the user actually visited
+  // instead of bouncing straight back to the same redirect.
+  const go = useCallback((hash: string, opts?: { replace?: boolean }) => {
+    if (opts?.replace) {
+      history.replaceState(null, '', hash);
+      setRoute(parse(hash));
+    } else {
+      location.hash = hash;
+    }
   }, []);
 
   const exploreHref = currentBookId ? `#/b/${currentBookId}` : '#/books';

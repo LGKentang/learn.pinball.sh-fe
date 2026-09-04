@@ -105,16 +105,24 @@ function TopicCanvas({
   }, []);
 
   function onPointerDown(e: React.PointerEvent) {
-    // Anything interactive keeps its own press. Capturing the pointer here would
-    // retarget the pointerup and the control would never receive its click.
+    // Anything interactive keeps its own press — but plain buttons don't need
+    // pointer capture to get their click, so it's safe to grab it for everything
+    // else. Without capture, a fast drag can leave the pointer over the nav or the
+    // inspector mid-move, and their hover/focus states light up while the map is
+    // still what's being dragged.
     if ((e.target as HTMLElement).closest('button, .canvas-tools')) return;
     if (e.button !== 0) return;
+    // Bubbling still reaches these window listeners once captured — capture only
+    // changes what the pointer is hit-tested against, not where events propagate.
+    const el = e.currentTarget as HTMLElement;
+    el.setPointerCapture(e.pointerId);
     setDragging(true);
     const start = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
     const move = (ev: PointerEvent) =>
       setView((v) => ({ ...v, x: start.vx + (ev.clientX - start.x), y: start.vy + (ev.clientY - start.y) }));
-    const up = () => {
+    const up = (ev: PointerEvent) => {
       setDragging(false);
+      el.releasePointerCapture(ev.pointerId);
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
     };

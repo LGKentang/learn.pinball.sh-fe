@@ -88,6 +88,7 @@ h2 { font-size: 15px; margin: 0 0 12px; letter-spacing: -0.01em; }
 .btn.primary:hover { filter: brightness(1.08); }
 .btn.ghost { background: transparent; border-color: transparent; color: var(--dim); }
 .btn.ghost:hover { background: var(--panel-2); color: var(--text); }
+.btn.ghost.danger:hover { background: rgba(255, 157, 134, 0.12); color: #ff9d86; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .topics-btn {
@@ -110,6 +111,14 @@ h2 { font-size: 15px; margin: 0 0 12px; letter-spacing: -0.01em; }
   background: var(--panel); border: 1px solid var(--line);
   border-radius: var(--radius); padding: 18px;
 }
+
+.draft-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin: 0 0 12px; padding: 7px 10px 7px 12px;
+  background: var(--accent-soft); border: 1px solid var(--accent);
+  border-radius: 8px; color: var(--accent);
+}
+.draft-banner .btn { color: var(--dim); }
 
 /* --------------------------------------------------------------- state pip */
 
@@ -616,9 +625,12 @@ h2 { font-size: 15px; margin: 0 0 12px; letter-spacing: -0.01em; }
 }
 .picker-row:hover, .picker-row.sel { border-color: var(--accent); background: var(--panel-2); }
 .picker-row .t {
-  display: flex; align-items: center; gap: 8px; font-size: 14.5px; line-height: 1.4;
+  font-size: 14.5px; line-height: 1.4;
 }
-.picker-row .t .dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+.picker-row .t .dot {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  margin-right: 8px; vertical-align: middle;
+}
 .picker-row .s {
   display: block; margin-top: 4px; font-size: 12.5px; color: var(--dim); line-height: 1.45;
 }
@@ -640,8 +652,31 @@ h2 { font-size: 15px; margin: 0 0 12px; letter-spacing: -0.01em; }
 /* --------------------------------------------------------------- bookshelves */
 
 .shelves { display: grid; gap: 26px; margin-top: 22px; }
+.shelves-subhead {
+  margin: 4px 0 -14px; font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
+  color: var(--dim);
+}
+
+/* a sticky strip of jump links so getting to one shelf among many doesn't mean
+   scrolling past all the others first */
+.shelf-jump {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-top: 18px;
+  position: sticky; top: 0; z-index: 3; padding: 8px 0;
+  background: var(--bg);
+}
+.shelf-jump-chip {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 20px;
+  padding: 5px 12px; font-size: 12.5px; color: var(--dim);
+}
+.shelf-jump-chip:hover { border-color: var(--accent); color: var(--text); }
+.shelf-jump-star { color: #e2b352; margin-right: 5px; }
 
 .shelf-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.shelf-collapse {
+  background: none; border: none; padding: 0; width: 16px; color: var(--dimmer);
+  font-size: 13px; line-height: 1;
+}
+.shelf-collapse:hover { color: var(--text); }
 .shelf-title {
   background: none; border: none; padding: 0; margin: 0; font-size: 15px; font-weight: 600;
   color: var(--text); letter-spacing: -0.01em;
@@ -649,6 +684,12 @@ h2 { font-size: 15px; margin: 0 0 12px; letter-spacing: -0.01em; }
 .shelf-title:hover { color: var(--accent); }
 .shelf-title-input { font-size: 15px; font-weight: 600; padding: 4px 8px; max-width: 240px; }
 .shelf-count { flex: 1 1 auto; }
+.shelf-fav {
+  background: none; border: none; padding: 2px 6px; color: var(--dimmer); font-size: 14px;
+  line-height: 1; border-radius: 6px;
+}
+.shelf-fav:hover { color: #e2b352; background: var(--panel-2); }
+.shelf-fav.on { color: #e2b352; }
 .shelf-del {
   background: none; border: none; padding: 2px 6px; color: var(--dimmer); font-size: 16px;
   line-height: 1; border-radius: 6px;

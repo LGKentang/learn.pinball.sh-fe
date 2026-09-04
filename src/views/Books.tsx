@@ -88,6 +88,15 @@ export function Books({ go }: { go: (h: string) => void }) {
     }
   }
 
+  async function toggleFavorite(id: string, favorite: boolean) {
+    try {
+      await api.updateLibrary(id, { favorite });
+      await load();
+    } catch (e) {
+      setError(e);
+    }
+  }
+
   async function deleteLibrary(id: string) {
     if (!confirm('Delete this library? Its books become unsorted, not deleted.')) return;
     try {
@@ -189,6 +198,23 @@ export function Books({ go }: { go: (h: string) => void }) {
     return { map, unsorted };
   }, [books]);
 
+  // Favorited libraries get pulled into their own compact group up top — the
+  // server already sorts favorites first, so this is just a split, not a resort.
+  const favLibraries = libraries.filter((l) => l.favorite);
+  const restLibraries = libraries.filter((l) => !l.favorite);
+  const showUnsorted = byLibrary.unsorted.length > 0 || libraries.length === 0;
+  const jumpTargets = [
+    ...libraries.map((l) => ({ id: l.id, title: l.title, favorite: l.favorite })),
+    ...(showUnsorted ? [{ id: null as string | null, title: 'Unsorted', favorite: false }] : []),
+  ];
+
+  function jumpToShelf(libraryId: string | null) {
+    document.getElementById(`shelf-${libraryId ?? 'unsorted'}`)?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
+  }
+
   return (
     <div className="wrap picker">
       <div className="spread" style={{ marginBottom: 8 }}>
@@ -255,62 +281,99 @@ export function Books({ go }: { go: (h: string) => void }) {
       )}
 
       {!q && books.length > 0 && (
-        <div className="shelves">
-          {libraries.map((lib) => (
-            <Shelf
-              key={lib.id}
-              libraryId={lib.id}
-              title={lib.title}
-              count={lib.book_count}
-              books={byLibrary.map.get(lib.id) ?? []}
-              libraries={libraries}
-              stats={stats}
-              go={go}
-              onMove={moveBook}
-              onRename={(t) => void renameLibrary(lib.id, t)}
-              onDelete={() => void deleteLibrary(lib.id)}
-            />
-          ))}
-
-          {(byLibrary.unsorted.length > 0 || libraries.length === 0) && (
-            <Shelf
-              libraryId={null}
-              title="Unsorted"
-              count={byLibrary.unsorted.length}
-              books={byLibrary.unsorted}
-              libraries={libraries}
-              stats={stats}
-              go={go}
-              onMove={moveBook}
-              unsorted
-            />
+        <>
+          {jumpTargets.length > 3 && (
+            <nav className="shelf-jump" aria-label="Jump to a library">
+              {jumpTargets.map((t) => (
+                <button key={t.id ?? 'unsorted'} className="shelf-jump-chip" onClick={() => jumpToShelf(t.id)}>
+                  {t.favorite && <span className="shelf-jump-star">★</span>}
+                  {t.title}
+                </button>
+              ))}
+            </nav>
           )}
 
-          {newLibOpen ? (
-            <div className="shelf shelf-new-form">
-              <input
-                autoFocus
-                className="field"
-                placeholder="Library name"
-                value={newLibTitle}
-                onChange={(e) => setNewLibTitle(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && void createLibrary()}
+          <div className="shelves">
+            {favLibraries.length > 0 && <p className="shelves-subhead">★ Favorites</p>}
+            {favLibraries.map((lib) => (
+              <Shelf
+                key={lib.id}
+                libraryId={lib.id}
+                title={lib.title}
+                count={lib.book_count}
+                favorite={lib.favorite}
+                books={byLibrary.map.get(lib.id) ?? []}
+                libraries={libraries}
+                stats={stats}
+                go={go}
+                onMove={moveBook}
+                onRename={(t) => void renameLibrary(lib.id, t)}
+                onDelete={() => void deleteLibrary(lib.id)}
+                onToggleFavorite={(v) => void toggleFavorite(lib.id, v)}
               />
-              <div className="row" style={{ marginTop: 10 }}>
-                <button className="btn primary" onClick={() => void createLibrary()} disabled={!newLibTitle.trim()}>
-                  Create
-                </button>
-                <button className="btn" onClick={() => setNewLibOpen(false)}>
-                  Cancel
-                </button>
+            ))}
+
+            {favLibraries.length > 0 && restLibraries.length > 0 && (
+              <p className="shelves-subhead">All libraries</p>
+            )}
+            {restLibraries.map((lib) => (
+              <Shelf
+                key={lib.id}
+                libraryId={lib.id}
+                title={lib.title}
+                count={lib.book_count}
+                favorite={lib.favorite}
+                books={byLibrary.map.get(lib.id) ?? []}
+                libraries={libraries}
+                stats={stats}
+                go={go}
+                onMove={moveBook}
+                onRename={(t) => void renameLibrary(lib.id, t)}
+                onDelete={() => void deleteLibrary(lib.id)}
+                onToggleFavorite={(v) => void toggleFavorite(lib.id, v)}
+              />
+            ))}
+
+            {showUnsorted && (
+              <Shelf
+                libraryId={null}
+                title="Unsorted"
+                count={byLibrary.unsorted.length}
+                books={byLibrary.unsorted}
+                libraries={libraries}
+                stats={stats}
+                go={go}
+                onMove={moveBook}
+                unsorted
+              />
+            )}
+
+            {newLibOpen ? (
+              <div className="shelf shelf-new-form">
+                <input
+                  autoFocus
+                  className="field"
+                  placeholder="Library name"
+                  value={newLibTitle}
+                  onChange={(e) => setNewLibTitle(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && void createLibrary()}
+                />
+                <div className="row" style={{ marginTop: 10 }}>
+                  <button className="btn primary" onClick={() => void createLibrary()} disabled={!newLibTitle.trim()}>
+                    Create
+                  </button>
+                  <button className="btn" onClick={() => setNewLibOpen(false)}>
+                    Cancel
+                  </button>
+                </div>
               </div>
-            </div>
-          ) : (
-            <button className="shelf-new" onClick={() => setNewLibOpen(true)}>
-              + New library
-            </button>
-          )}
-        </div>
+            ) : (
+              <button className="shelf-new" onClick={() => setNewLibOpen(true)}>
+                + New library
+              </button>
+            )}
+          </div>
+        </>
       )}
 
       {!!q && !all.length && (
@@ -396,10 +459,30 @@ const BOOK_DRAG_TYPE = 'application/x-pinball-book-id';
 
 /** One Library's grid of book cards, or the "Unsorted" catch-all — a strip-bordered
  * bin rather than a real shelf, since these books haven't been put anywhere yet. */
+/** Collapse is remembered per shelf so it stays out of the way on return visits
+ * instead of resetting every load — the whole point once there are many of them. */
+const shelfCollapsedKey = (libraryId: string) => `pinball:shelfCollapsed:${libraryId}`;
+function readShelfCollapsed(libraryId: string): boolean {
+  try {
+    return localStorage.getItem(shelfCollapsedKey(libraryId)) === '1';
+  } catch {
+    return false;
+  }
+}
+function writeShelfCollapsed(libraryId: string, collapsed: boolean) {
+  try {
+    if (collapsed) localStorage.setItem(shelfCollapsedKey(libraryId), '1');
+    else localStorage.removeItem(shelfCollapsedKey(libraryId));
+  } catch {
+    /* private mode, or storage disabled — the shelf just reopens next time */
+  }
+}
+
 function Shelf({
   libraryId,
   title,
   count,
+  favorite,
   books,
   libraries,
   stats,
@@ -407,11 +490,13 @@ function Shelf({
   onMove,
   onRename,
   onDelete,
+  onToggleFavorite,
   unsorted,
 }: {
   libraryId: string | null;
   title: string;
   count: number;
+  favorite?: boolean;
   books: BookSummary[];
   libraries: LibrarySummary[];
   stats: (id: string) => { total: number; by: Partial<Record<State, number>> } | null;
@@ -419,15 +504,32 @@ function Shelf({
   onMove: (bookId: string, libraryId: string | null) => void;
   onRename?: (title: string) => void;
   onDelete?: () => void;
+  onToggleFavorite?: (favorite: boolean) => void;
   unsorted?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(title);
   const [dragOver, setDragOver] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => (unsorted ? false : readShelfCollapsed(libraryId!)));
+
+  function toggleCollapsed() {
+    setCollapsed((c) => {
+      const next = !c;
+      if (!unsorted) writeShelfCollapsed(libraryId!, next);
+      return next;
+    });
+  }
 
   return (
-    <div className="shelf">
+    <div className="shelf" id={`shelf-${libraryId ?? 'unsorted'}`}>
       <div className="shelf-head">
+        <button
+          className="shelf-collapse"
+          onClick={toggleCollapsed}
+          title={collapsed ? 'Expand' : 'Collapse'}
+        >
+          {collapsed ? '›' : '⌄'}
+        </button>
         {editing ? (
           <input
             autoFocus
@@ -461,11 +563,21 @@ function Shelf({
           {count} book{count === 1 ? '' : 's'}
         </span>
         {!unsorted && (
+          <button
+            className={`shelf-fav ${favorite ? 'on' : ''}`}
+            onClick={() => onToggleFavorite?.(!favorite)}
+            title={favorite ? 'Remove from favorites' : 'Add to favorites'}
+          >
+            ★
+          </button>
+        )}
+        {!unsorted && (
           <button className="shelf-del" onClick={onDelete} title="Delete library">
             ×
           </button>
         )}
       </div>
+      {!collapsed && (
       <div
         className={`shelf-grid ${unsorted ? 'shelf-grid-unsorted' : ''} ${dragOver ? 'drag-over' : ''}`}
         onDragOver={(e) => {
@@ -492,6 +604,7 @@ function Shelf({
           ))
         )}
       </div>
+      )}
     </div>
   );
 }

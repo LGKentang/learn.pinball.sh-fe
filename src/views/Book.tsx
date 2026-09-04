@@ -16,6 +16,35 @@ import { MarkdownEditor } from '../MarkdownEditor';
 import { Note, invalidateQuestionIndex } from '../Note';
 import { diffStats, wordDiff } from '../diff';
 
+/**
+ * An unsaved "current understanding" draft, kept client-side only. `understanding`
+ * is otherwise only ever written alongside a `revision` row (history is append-only)
+ * — this exists purely so typing isn't lost to a reload or an accidental navigation
+ * away, never as a second path into history.
+ */
+const draftKey = (questionId: string) => `pinball:draft:${questionId}`;
+function readDraft(questionId: string): string | null {
+  try {
+    return localStorage.getItem(draftKey(questionId));
+  } catch {
+    return null;
+  }
+}
+function writeDraft(questionId: string, text: string) {
+  try {
+    localStorage.setItem(draftKey(questionId), text);
+  } catch {
+    /* private mode, or storage disabled — the draft just won't survive a reload */
+  }
+}
+function clearDraft(questionId: string) {
+  try {
+    localStorage.removeItem(draftKey(questionId));
+  } catch {
+    /* nothing to clean up if it never wrote in the first place */
+  }
+}
+
 export function BookView({
   bookId,
   questionId,
@@ -23,7 +52,7 @@ export function BookView({
 }: {
   bookId: string;
   questionId: string | null;
-  go: (hash: string) => void;
+  go: (hash: string, opts?: { replace?: boolean }) => void;
 }) {
   const [detail, setDetail] = useState<BookDetail | null>(null);
   const [question, setQuestion] = useState<QuestionDetail | null>(null);
@@ -55,14 +84,25 @@ export function BookView({
   }, [questionId, loadQuestion]);
 
   // Land on the first root question so the workspace is never a blank slate.
+  // Replaces rather than pushes: this redirect isn't a click the user made, so it
+  // shouldn't be a step the back button has to fight through to leave the book.
   useEffect(() => {
-    if (!questionId && detail?.tree.length) go(`#/b/${bookId}/q/${detail.tree[0].id}`);
+    if (!questionId && detail?.tree.length) {
+      go(`#/b/${bookId}/q/${detail.tree[0].id}`, { replace: true });
+    }
   }, [questionId, detail, bookId, go]);
 
   async function refresh() {
     invalidateQuestionIndex();
     await loadTree();
     if (questionId) await loadQuestion(questionId);
+  }
+
+  // Deletion navigates away first, so this never reloads the question it just
+  // removed — the route change is what drives loadQuestion for the fallback.
+  async function afterDeleteQuestion() {
+    invalidateQuestionIndex();
+    await loadTree();
   }
 
   if (!detail) {
@@ -116,6 +156,7 @@ export function BookView({
               detail={question}
               go={go}
               refresh={refresh}
+              onDeleted={afterDeleteQuestion}
               onError={setError}
               bookId={bookId}
             />
@@ -287,12 +328,14 @@ function QuestionPane({
   detail,
   go,
   refresh,
+  onDeleted,
   onError,
   bookId,
 }: {
   detail: QuestionDetail;
-  go: (hash: string) => void;
+  go: (hash: string, opts?: { replace?: boolean }) => void;
   refresh: () => Promise<void>;
+  onDeleted: () => Promise<void>;
   onError: (e: unknown) => void;
   bookId: string;
 }) {
@@ -308,10 +351,9 @@ function QuestionPane({
   const [linked, setLinked] = useState(0);
   const [editingTitle, setEditingTitle] = useState(false);
   const [title, setTitle] = useState(q.title);
+  const [restoredDraft, setRestoredDraft] = useState(false);
 
   useEffect(() => {
-    setDraft(q.understanding ?? '');
-    setEditing(false);
     setKind(q.understanding ? 'refinement' : 'initial');
     setNote('');
     setTrigger('');
@@ -320,7 +362,39 @@ function QuestionPane({
     setLinked(0);
     setTitle(q.title);
     setEditingTitle(false);
+
+    // A revision is the only thing that's allowed to change `understanding` — an
+    // in-progress edit that never got saved would otherwise just vanish on reload
+    // or on navigating away, so it's kept locally and offered back here.
+    const saved = readDraft(q.id);
+    if (saved !== null && saved !== (q.understanding ?? '')) {
+      setDraft(saved);
+      setEditing(true);
+      setRestoredDraft(true);
+    } else {
+      setDraft(q.understanding ?? '');
+      setEditing(false);
+      setRestoredDraft(false);
+    }
   }, [q.id, q.understanding, q.title]);
+
+  // Debounced local draft — never sent to the server, never a revision. Only
+  // "Save revision" below writes to history.
+  useEffect(() => {
+    if (!editing) return;
+    const t = setTimeout(() => {
+      if (draft.trim() && draft !== (q.understanding ?? '')) writeDraft(q.id, draft);
+      else clearDraft(q.id);
+    }, 600);
+    return () => clearTimeout(t);
+  }, [draft, editing, q.id, q.understanding]);
+
+  function discardDraft() {
+    clearDraft(q.id);
+    setDraft(q.understanding ?? '');
+    setEditing(false);
+    setRestoredDraft(false);
+  }
 
   async function save() {
     try {
@@ -330,7 +404,9 @@ function QuestionPane({
         note: note.trim() || null,
         triggered_by_question_id: trigger || null,
       });
+      clearDraft(q.id);
       setEditing(false);
+      setRestoredDraft(false);
       setLinked(res.linked);
       await refresh();
     } catch (e) {
@@ -357,6 +433,23 @@ function QuestionPane({
     setEditingTitle(false);
     if (!t || t === q.title) return setTitle(q.title);
     await patch({ title: t });
+  }
+
+  async function deleteQuestion() {
+    const ok = confirm(
+      children.length
+        ? `Delete “${q.title}” and its ${children.length} subquestion${children.length === 1 ? '' : 's'}? This cannot be undone.`
+        : `Delete “${q.title}”? This cannot be undone.`,
+    );
+    if (!ok) return;
+    try {
+      await api.deleteQuestion(q.id);
+      await onDeleted();
+      const parent = ancestors[ancestors.length - 1];
+      go(parent ? `#/b/${bookId}/q/${parent.id}` : `#/b/${bookId}`);
+    } catch (e) {
+      onError(e);
+    }
   }
 
   return (
@@ -429,6 +522,13 @@ function QuestionPane({
             {showTrail ? 'Hide' : 'Show'} learning trail ({revisions.length})
           </button>
         )}
+        <button
+          className="btn ghost danger small"
+          title="Delete this question and its subquestions"
+          onClick={() => void deleteQuestion()}
+        >
+          Delete
+        </button>
       </div>
       {q.park_reason && <p className="small dimmer" style={{ marginTop: 0 }}>{q.park_reason}</p>}
 
@@ -445,6 +545,14 @@ function QuestionPane({
 
         {editing ? (
           <div className="card">
+            {restoredDraft && (
+              <p className="draft-banner small">
+                Restored an unsaved draft from last time.
+                <button className="btn ghost small" onClick={discardDraft}>
+                  Discard
+                </button>
+              </p>
+            )}
             <MarkdownEditor
               autoFocus
               title={q.title}

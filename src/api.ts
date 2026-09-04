@@ -70,6 +70,7 @@ export interface Library {
   id: string;
   user_id: string;
   title: string;
+  favorite: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -271,7 +272,7 @@ export const api = {
 
   libraries: () => req<LibrarySummary[]>('/libraries'),
   createLibrary: (title: string) => post<Library>('/libraries', { title }),
-  updateLibrary: (id: string, patch: { title?: string }) =>
+  updateLibrary: (id: string, patch: { title?: string; favorite?: boolean }) =>
     req<Library>(`/libraries/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   deleteLibrary: (id: string) => req<void>(`/libraries/${id}`, { method: 'DELETE' }),
 
