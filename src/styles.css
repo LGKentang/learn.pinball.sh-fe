@@ -669,7 +669,7 @@ h2 { font-size: 15px; margin: 0 0 12px; letter-spacing: -0.01em; }
   padding: 5px 12px; font-size: 12.5px; color: var(--dim);
 }
 .shelf-jump-chip:hover { border-color: var(--accent); color: var(--text); }
-.shelf-jump-star { color: #e2b352; margin-right: 5px; }
+.shelf-jump-star { color: #ffd651; margin-right: 5px; }
 
 .shelf-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .shelf-collapse {
@@ -688,8 +688,8 @@ h2 { font-size: 15px; margin: 0 0 12px; letter-spacing: -0.01em; }
   background: none; border: none; padding: 2px 6px; color: var(--dimmer); font-size: 14px;
   line-height: 1; border-radius: 6px;
 }
-.shelf-fav:hover { color: #e2b352; background: var(--panel-2); }
-.shelf-fav.on { color: #e2b352; }
+.shelf-fav:hover { color: #ffd651; background: var(--panel-2); }
+.shelf-fav.on { color: #ffd651; text-shadow: 0 0 8px #ffd65166; }
 .shelf-del {
   background: none; border: none; padding: 2px 6px; color: var(--dimmer); font-size: 16px;
   line-height: 1; border-radius: 6px;
