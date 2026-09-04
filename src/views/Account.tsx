@@ -30,16 +30,61 @@ export function Account({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  // Publishing is a network round trip. Without this the button stayed live and a
+  // double click published then immediately unpublished.
+  const [publishing, setPublishing] = useState<string | null>(null);
+  // Unpublishing takes a live URL offline, so it asks once — inline, rather than
+  // stacking a confirm dialog on top of a dialog.
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
   const timer = useRef<number>(0);
+  const dialog = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     void api.books().then(setBooks).catch(() => undefined);
   }, []);
 
+  /**
+   * A dialog that does not trap focus is one keyboard users tab straight out of,
+   * into a page they cannot see behind the scrim. Also restores focus to whatever
+   * opened it, and stops the page behind from scrolling.
+   */
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const opener = document.activeElement as HTMLElement | null;
+    const visible = (el: HTMLElement) => el.getClientRects().length > 0;
+    const focusable = () =>
+      Array.from(
+        dialog.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      ).filter(visible);
+
+    focusable()[0]?.focus();
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') return onClose();
+      if (e.key !== 'Tab') return;
+      const items = focusable();
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
     addEventListener('keydown', onKey);
-    return () => removeEventListener('keydown', onKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      removeEventListener('keydown', onKey);
+      document.body.style.overflow = previousOverflow;
+      opener?.focus?.();
+    };
   }, [onClose]);
 
   // Debounced availability check, so typing a handle is not trial and error.
@@ -89,8 +134,18 @@ export function Account({
   }
 
   async function togglePublish(book: BookSummary) {
-    setError(null);
     const wasPublished = !!book.published_at;
+
+    if (wasPublished && confirming !== book.id) {
+      setConfirming(book.id);
+      window.setTimeout(() => setConfirming((id) => (id === book.id ? null : id)), 4000);
+      return;
+    }
+
+    setConfirming(null);
+    setError(null);
+    setStatus(null);
+    setPublishing(book.id);
     try {
       const res = await api.publishBook(book.id, { published: !wasPublished });
       setBooks((bs) =>
@@ -100,8 +155,15 @@ export function Account({
             : b,
         ),
       );
+      setStatus(
+        res.published
+          ? `“${book.title}” is live at ${res.url}`
+          : `“${book.title}” is private again.`,
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : 'could not change that');
+    } finally {
+      setPublishing(null);
     }
   }
 
@@ -117,8 +179,10 @@ export function Account({
   return createPortal(
     <div className="modal-scrim" onMouseDown={onClose}>
       <div
+        ref={dialog}
         className="modal account"
         role="dialog"
+        aria-modal="true"
         aria-label="Account"
         onMouseDown={(e) => e.stopPropagation()}
       >
@@ -140,6 +204,11 @@ export function Account({
         </header>
 
         {error && <div className="signin-error">{error}</div>}
+        {status && (
+          <p className="small ok" role="status">
+            {status}
+          </p>
+        )}
 
         <section>
           <p className="eyebrow">Your site</p>
@@ -227,11 +296,18 @@ export function Account({
                     )}
                   </div>
                   <button
-                    className={`btn small ${live ? '' : 'primary'}`}
-                    disabled={!me.handle}
+                    className={`btn small ${live ? (confirming === b.id ? 'danger' : '') : 'primary'}`}
+                    disabled={!me.handle || publishing === b.id}
+                    aria-busy={publishing === b.id}
                     onClick={() => void togglePublish(b)}
                   >
-                    {live ? 'Unpublish' : 'Publish'}
+                    {publishing === b.id
+                      ? 'Working…'
+                      : live
+                        ? confirming === b.id
+                          ? 'Confirm'
+                          : 'Unpublish'
+                        : 'Publish'}
                   </button>
                 </div>
               );

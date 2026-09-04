@@ -115,7 +115,14 @@ export default function App() {
 
   // Nothing renders until we know: flashing the app and then replacing it with a
   // sign-in screen looks like a bug and fires a round of doomed requests.
-  if (!ready) return <div className="boot" aria-busy="true" />;
+  // An empty dark rectangle is also what a broken app looks like, so say something.
+  if (!ready)
+    return (
+      <div className="boot" role="status" aria-live="polite">
+        <i className="ball" />
+        <span>Loading Pinball Learn…</span>
+      </div>
+    );
   if (!me) {
     return showSignIn ? (
       <SignIn onSignedIn={setMe} />
@@ -126,10 +133,16 @@ export default function App() {
 
   return (
     <div className="app">
+      {/* Five focusable items sit between the top of the page and the content on
+          every route; a keyboard user should not have to tab through them twice. */}
+      <a className="skip-link" href="#content">
+        Skip to content
+      </a>
+
       <header className="topbar">
         <a className="brand" href="#/">
           <i className="ball" />
-          Pinball Learn
+          <span className="brand-name">Pinball Learn</span>
           <small>learn.pinball.sh</small>
         </a>
         <nav className="nav">
@@ -161,6 +174,10 @@ export default function App() {
           <span className="who mono">{me.handle ?? me.name ?? me.email.split('@')[0]}</span>
         </button>
       </header>
+
+      {/* Absolutely positioned, so the skip link has a target without a wrapper
+          element that would change the flex layout each route depends on. */}
+      <span id="content" className="skip-target" tabIndex={-1} />
 
       {showAccount && (
         <Account

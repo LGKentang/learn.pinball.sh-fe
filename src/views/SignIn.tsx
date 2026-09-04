@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api, type AuthConfig, type Me } from '../api';
 
 const ERRORS: Record<string, string> = {
@@ -17,8 +17,26 @@ const ERRORS: Record<string, string> = {
  */
 export function SignIn({ onSignedIn }: { onSignedIn: (me: Me) => void }) {
   const [config, setConfig] = useState<AuthConfig | null>(null);
+  // A server that cannot be reached and a server with no Google credentials used
+  // to render the same message, which told visitors to go and edit environment
+  // variables when the truth was that the API was down. They are separate states.
+  const [status, setStatus] = useState<'loading' | 'ready' | 'unreachable'>('loading');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setStatus('loading');
+    void api
+      .authConfig()
+      .then((c) => {
+        setConfig(c);
+        setStatus('ready');
+      })
+      .catch(() => {
+        setConfig(null);
+        setStatus('unreachable');
+      });
+  }, []);
 
   useEffect(() => {
     // The OAuth callback bounces back here with ?auth_error=… when it refuses.
@@ -28,11 +46,8 @@ export function SignIn({ onSignedIn }: { onSignedIn: (me: Me) => void }) {
       setError(ERRORS[code] ?? `Sign-in failed (${code}).`);
       history.replaceState(null, '', location.pathname + location.hash);
     }
-    void api
-      .authConfig()
-      .then(setConfig)
-      .catch(() => setConfig({ google: false, dev: false, base_domain: 'pinball.sh' }));
-  }, []);
+    load();
+  }, [load]);
 
   function google() {
     setBusy(true);
@@ -73,6 +88,24 @@ export function SignIn({ onSignedIn }: { onSignedIn: (me: Me) => void }) {
         {error && <div className="signin-error">{error}</div>}
 
         <div className="signin-actions">
+          {status === 'loading' && (
+            <button className="btn" disabled aria-busy="true">
+              Checking sign-in…
+            </button>
+          )}
+
+          {status === 'unreachable' && (
+            <div className="signin-offline">
+              <p>
+                <strong>Can’t reach the server.</strong> The page loaded, but the API did not
+                answer. This is usually temporary.
+              </p>
+              <button className="btn" onClick={load}>
+                Try again
+              </button>
+            </div>
+          )}
+
           {config?.google && (
             <button className="btn google" onClick={google} disabled={busy}>
               <GoogleMark />
@@ -86,10 +119,11 @@ export function SignIn({ onSignedIn }: { onSignedIn: (me: Me) => void }) {
             </button>
           )}
 
-          {config && !config.google && !config.dev && (
+          {status === 'ready' && config && !config.google && !config.dev && (
             <p className="small dimmer">
-              Sign-in is not configured on this server yet. Set <code>GOOGLE_CLIENT_ID</code> and{' '}
-              <code>GOOGLE_CLIENT_SECRET</code>, or <code>PINBALL_DEV_LOGIN</code> for local work.
+              The server answered, but no sign-in method is configured. If this is your server,
+              set <code>GOOGLE_CLIENT_ID</code> and <code>GOOGLE_CLIENT_SECRET</code>, or{' '}
+              <code>PINBALL_DEV_LOGIN</code> for local work.
             </p>
           )}
         </div>
