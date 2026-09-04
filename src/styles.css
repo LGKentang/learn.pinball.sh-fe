@@ -655,19 +655,18 @@ h2 { font-size: 15px; margin: 0 0 12px; letter-spacing: -0.01em; }
 }
 .shelf-del:hover { color: #ff9d86; background: var(--panel-2); }
 
-.shelf-row {
-  display: flex; align-items: flex-end; gap: 10px; padding: 16px 14px 14px; min-height: 60px;
-  overflow-x: auto; border-radius: var(--radius);
-  background: linear-gradient(180deg, transparent 0%, transparent calc(100% - 10px), var(--line) calc(100% - 10px));
-  background-color: var(--panel);
+.shelf-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px;
+  padding: 14px; min-height: 60px; border-radius: var(--radius);
+  background: var(--panel);
   border: 1px solid var(--line);
   transition: border-color 0.15s ease, background-color 0.15s ease;
 }
-.shelf-row.drag-over { border-color: var(--accent); background-color: var(--panel-2); }
-.shelf-empty { padding: 8px 4px; }
+.shelf-grid.drag-over { border-color: var(--accent); background-color: var(--panel-2); }
+.shelf-empty { padding: 8px 4px; grid-column: 1 / -1; }
 
 /* Unsorted is a holding bin, not a shelf — a strip border says so at a glance. */
-.shelf-row-unsorted {
+.shelf-grid-unsorted {
   background-image: repeating-linear-gradient(
     -45deg, var(--line) 0 10px, var(--panel) 10px 20px
   );
@@ -675,27 +674,28 @@ h2 { font-size: 15px; margin: 0 0 12px; letter-spacing: -0.01em; }
   border: 2px dashed var(--line);
   border-radius: var(--radius);
 }
-.shelf-row-unsorted.drag-over { border-color: var(--accent); }
+.shelf-grid-unsorted.drag-over { border-color: var(--accent); }
 
-.spine-slot { display: grid; gap: 6px; justify-items: stretch; flex: 0 0 auto; transition: opacity 0.15s ease; }
-.spine-slot.dragging { opacity: 0.35; }
-.spine {
-  display: flex; align-items: flex-start; justify-content: flex-end;
-  border: 1px solid #00000030; border-radius: 4px 4px 2px 2px; padding: 8px 0;
-  box-shadow: 1px 0 0 #ffffff0d inset, 0 3px 8px -3px #00000080;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  cursor: grab;
+/* each book: a horizontal .picker-row.topic card (reusing that pattern's title/
+   subtitle/meter styling) plus a small "move to library" select tucked in the
+   corner — the keyboard/screen-reader fallback for the drag-and-drop move. */
+.book-card { position: relative; transition: opacity 0.15s ease; }
+.book-card.dragging { opacity: 0.35; }
+.book-card .picker-row { width: 100%; cursor: grab; }
+.book-card .picker-row:active { cursor: grabbing; }
+.book-card .t { padding-right: 78px; }
+
+.book-card-move {
+  position: absolute; top: 12px; right: 12px; max-width: 92px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px;
+  font-size: 10.5px; padding: 2px 4px; color: var(--dimmer);
+  opacity: 0.35; transition: opacity 0.15s ease; cursor: pointer;
 }
-.spine:hover {
-  transform: translateY(-5px);
-  box-shadow: 1px 0 0 #ffffff0d inset, 0 8px 16px -6px #000000a0;
-}
-.spine:active { cursor: grabbing; }
-.spine-title {
-  writing-mode: vertical-rl; text-orientation: mixed; transform: rotate(180deg);
-  font-size: 11.5px; font-weight: 600; color: #0d0f14; letter-spacing: -0.01em;
-  max-height: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  padding: 0 2px; text-shadow: 0 1px 0 #ffffff30;
+.book-card:hover .book-card-move,
+.book-card-move:hover,
+.book-card-move:focus,
+.book-card-move:focus-visible {
+  opacity: 1;
 }
 
 .shelf-new, .shelf-new-form {

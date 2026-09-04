@@ -16,21 +16,15 @@ interface Hit {
   published?: boolean;
 }
 
-/** A small, stable (not random-per-render) hash, used to vary spine sizing. */
-function hash(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return h;
-}
-
 /**
  * The one place every book is chosen from: search across books and questions,
  * create a new one, or pick an existing one to enter. Picking a question opens its
  * book with that question already selected, so search doubles as a jump-to.
  *
  * With no search text, books are shown as shelves — grouped by Library, each book a
- * spine whose color bands are its own question-state breakdown. Typing a search
- * switches to the flat, keyboard-navigable results list below instead.
+ * horizontal card with its title, intent/count, and a question-state progress meter
+ * (the same pattern the search results list below uses). Typing a search switches to
+ * the flat, keyboard-navigable results list below instead.
  */
 export function Books({ go }: { go: (h: string) => void }) {
   const { graph } = useGraph();
@@ -269,6 +263,7 @@ export function Books({ go }: { go: (h: string) => void }) {
               title={lib.title}
               count={lib.book_count}
               books={byLibrary.map.get(lib.id) ?? []}
+              libraries={libraries}
               stats={stats}
               go={go}
               onMove={moveBook}
@@ -283,6 +278,7 @@ export function Books({ go }: { go: (h: string) => void }) {
               title="Unsorted"
               count={byLibrary.unsorted.length}
               books={byLibrary.unsorted}
+              libraries={libraries}
               stats={stats}
               go={go}
               onMove={moveBook}
@@ -398,13 +394,14 @@ export function Books({ go }: { go: (h: string) => void }) {
 /** The drag payload's MIME type: a book id, and only a book id, is ever on the clipboard. */
 const BOOK_DRAG_TYPE = 'application/x-pinball-book-id';
 
-/** One Library's row of book spines, or the "Unsorted" catch-all — a strip-bordered
+/** One Library's grid of book cards, or the "Unsorted" catch-all — a strip-bordered
  * bin rather than a real shelf, since these books haven't been put anywhere yet. */
 function Shelf({
   libraryId,
   title,
   count,
   books,
+  libraries,
   stats,
   go,
   onMove,
@@ -416,6 +413,7 @@ function Shelf({
   title: string;
   count: number;
   books: BookSummary[];
+  libraries: LibrarySummary[];
   stats: (id: string) => { total: number; by: Partial<Record<State, number>> } | null;
   go: (h: string) => void;
   onMove: (bookId: string, libraryId: string | null) => void;
@@ -469,7 +467,7 @@ function Shelf({
         )}
       </div>
       <div
-        className={`shelf-row ${unsorted ? 'shelf-row-unsorted' : ''} ${dragOver ? 'drag-over' : ''}`}
+        className={`shelf-grid ${unsorted ? 'shelf-grid-unsorted' : ''} ${dragOver ? 'drag-over' : ''}`}
         onDragOver={(e) => {
           if (!e.dataTransfer.types.includes(BOOK_DRAG_TYPE)) return;
           e.preventDefault();
@@ -489,51 +487,39 @@ function Shelf({
             {unsorted ? 'Nothing unsorted.' : 'Drag a book here to shelve it.'}
           </p>
         ) : (
-          books.map((b) => <Spine key={b.id} book={b} stats={stats} go={go} />)
+          books.map((b) => (
+            <BookCard key={b.id} book={b} stats={stats} go={go} libraries={libraries} onMove={onMove} />
+          ))
         )}
       </div>
     </div>
   );
 }
 
-/** One book as a bookshelf spine: width and height vary per book, and the color
- * bands are that book's own question-state breakdown, most-done state on top.
- * Drag it onto another shelf to re-shelve it. */
-function Spine({
+/** One book as a horizontal, text-forward card — title, intent/count subtitle, and a
+ * question-state progress meter, the same visual pattern the search-results list below
+ * (`.picker-row.topic`) uses. Drag it onto another shelf to re-shelve it, or use the
+ * small library select as a keyboard/screen-reader-friendly fallback for the same move. */
+function BookCard({
   book,
   stats,
   go,
+  libraries,
+  onMove,
 }: {
   book: BookSummary;
   stats: (id: string) => { total: number; by: Partial<Record<State, number>> } | null;
   go: (h: string) => void;
+  libraries: LibrarySummary[];
+  onMove: (bookId: string, libraryId: string | null) => void;
 }) {
   const [dragging, setDragging] = useState(false);
-  const h = hash(book.id);
-  const width = 34 + (h % 22);
-  const height = 148 + ((h >> 5) % 46);
-
   const st = stats(book.id);
-  const order: State[] = ['verified', 'can_explain', 'understood', 'exploring', 'unexplored'];
-  let gradient = STATE_COLOR.unexplored;
-  if (st && st.total) {
-    let acc = 0;
-    const stops: string[] = [];
-    for (const k of order) {
-      const n = st.by[k] ?? 0;
-      if (!n) continue;
-      const pct = (n / st.total) * 100;
-      stops.push(`${STATE_COLOR[k]} ${acc}%`, `${STATE_COLOR[k]} ${acc + pct}%`);
-      acc += pct;
-    }
-    if (stops.length) gradient = `linear-gradient(180deg, ${stops.join(', ')})`;
-  }
 
   return (
-    <div className={`spine-slot ${dragging ? 'dragging' : ''}`} style={{ width }}>
+    <div className={`book-card ${dragging ? 'dragging' : ''}`}>
       <button
-        className="spine"
-        style={{ height, background: gradient }}
+        className="picker-row topic"
         draggable
         onDragStart={(e) => {
           e.dataTransfer.setData(BOOK_DRAG_TYPE, book.id);
@@ -542,10 +528,42 @@ function Spine({
         }}
         onDragEnd={() => setDragging(false)}
         onClick={() => go(`#/b/${book.id}`)}
-        title={book.title}
       >
-        <span className="spine-title">{book.title}</span>
+        <span className="t">
+          {book.title}
+          {book.published_at && <i className="live-dot" title="Published on your site" />}
+        </span>
+        <span className="s">
+          {book.intent ?? `${book.question_count} question${book.question_count === 1 ? '' : 's'}`}
+        </span>
+        {st && (
+          <span className="meter">
+            <span className="bar-track">
+              {(Object.keys(st.by) as State[]).map((k) => (
+                <i
+                  key={k}
+                  style={{ background: STATE_COLOR[k], width: `${((st.by[k] ?? 0) / st.total) * 100}%` }}
+                />
+              ))}
+            </span>
+            <em>{st.total}</em>
+          </span>
+        )}
       </button>
+      <select
+        className="book-card-move"
+        title="Move to library"
+        value={book.library_id ?? ''}
+        onClick={(e) => e.stopPropagation()}
+        onChange={(e) => onMove(book.id, e.target.value || null)}
+      >
+        <option value="">Unsorted</option>
+        {libraries.map((lib) => (
+          <option key={lib.id} value={lib.id}>
+            {lib.title}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
