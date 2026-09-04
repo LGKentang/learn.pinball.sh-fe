@@ -447,7 +447,10 @@ function LoopGraph({ phase }: { phase: { dir: 1 | -1; idx: number } | null }) {
     x: cx + r * Math.cos(angle(i)),
     y: cy + r * Math.sin(angle(i)),
   }));
-  const ringPath = `M ${cx + r} ${cy} A ${r} ${r} 0 1 1 ${cx - r} ${cy} A ${r} ${r} 0 1 1 ${cx + r} ${cy}`;
+  // Starts at node 0's own position (top, the same -90° the pts above use), not
+  // the rightmost point of the circle. Otherwise offset-distance 0% sits a
+  // quarter-turn away from the node the firing state says is lit.
+  const ringPath = `M ${cx} ${cy - r} A ${r} ${r} 0 1 1 ${cx} ${cy + r} A ${r} ${r} 0 1 1 ${cx} ${cy - r}`;
 
   return (
     <svg className="loop-graph" viewBox="0 0 280 280" role="presentation" aria-hidden="true">
