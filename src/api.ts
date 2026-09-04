@@ -55,12 +55,27 @@ export interface Book {
   user_id: string;
   title: string;
   intent: string | null;
+  /** The shelf this book sits on, if any. Null means unsorted. */
+  library_id: string | null;
   /** Set together: a book is public exactly when published_at is not null. */
   slug: string | null;
   published_at: string | null;
   created_at: string;
   updated_at: string;
   archived_at: string | null;
+}
+
+/** A named shelf a book can sit on, at most one at a time. */
+export interface Library {
+  id: string;
+  user_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LibrarySummary extends Library {
+  book_count: number;
 }
 
 export interface Me {
@@ -93,6 +108,7 @@ export interface PublishResult {
 export interface BookSummary extends Book {
   question_count: number;
   open_count: number;
+  library_title: string | null;
 }
 
 export interface Question {
@@ -245,13 +261,19 @@ export const api = {
 
   books: () => req<BookSummary[]>('/books'),
   book: (id: string) => req<BookDetail>(`/books/${id}`),
-  createBook: (title: string, intent: string | null) =>
-    post<Book>('/books', { title, intent }),
-  updateBook: (id: string, patch: { title?: string; intent?: string | null }) =>
+  createBook: (title: string, intent: string | null, libraryId?: string | null) =>
+    post<Book>('/books', { title, intent, library_id: libraryId }),
+  updateBook: (id: string, patch: { title?: string; intent?: string | null; library_id?: string | null }) =>
     req<Book>(`/books/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   deleteBook: (id: string) => req<void>(`/books/${id}`, { method: 'DELETE' }),
   publishBook: (id: string, input: { published: boolean; slug?: string }) =>
     post<PublishResult>(`/books/${id}/publish`, input),
+
+  libraries: () => req<LibrarySummary[]>('/libraries'),
+  createLibrary: (title: string) => post<Library>('/libraries', { title }),
+  updateLibrary: (id: string, patch: { title?: string }) =>
+    req<Library>(`/libraries/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deleteLibrary: (id: string) => req<void>(`/libraries/${id}`, { method: 'DELETE' }),
 
   question: (id: string) => req<QuestionDetail>(`/questions/${id}`),
   questionIndex: () => req<IndexedQuestion[]>('/questions'),

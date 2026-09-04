@@ -1,17 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { STATE_LABEL, type State } from '../api';
+import { STATE_LABEL } from '../api';
 import { ErrorNote } from '../ui';
 import { Note } from '../Note';
 import { useGraph, stepsFrom, type Graph } from '../graph';
 import { layoutGraph, NODE_H, NODE_W, type Layout } from '../canvasLayout';
-
-const COLOR: Record<State, string> = {
-  unexplored: '#39415a',
-  exploring: '#e2b352',
-  understood: '#5aa9ff',
-  can_explain: '#4ec9a0',
-  verified: '#b18aff',
-};
+import { STATE_COLOR as COLOR } from '../stateColors';
 
 interface View {
   x: number;

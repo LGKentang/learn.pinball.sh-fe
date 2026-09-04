@@ -1,15 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api, STATE_LABEL, type BookSummary, type State } from '../api';
+import { api, STATE_LABEL, type BookSummary, type LibrarySummary, type State } from '../api';
 import { ErrorNote } from '../ui';
 import { useGraph } from '../graph';
-
-const COLOR: Record<State, string> = {
-  unexplored: '#39415a',
-  exploring: '#e2b352',
-  understood: '#5aa9ff',
-  can_explain: '#4ec9a0',
-  verified: '#b18aff',
-};
+import { STATE_COLOR } from '../stateColors';
 
 interface Hit {
   key: string;
@@ -23,25 +16,41 @@ interface Hit {
   published?: boolean;
 }
 
+/** A small, stable (not random-per-render) hash, used to vary spine sizing. */
+function hash(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return h;
+}
+
 /**
  * The one place every book is chosen from: search across books and questions,
  * create a new one, or pick an existing one to enter. Picking a question opens its
  * book with that question already selected, so search doubles as a jump-to.
+ *
+ * With no search text, books are shown as shelves — grouped by Library, each book a
+ * spine whose color bands are its own question-state breakdown. Typing a search
+ * switches to the flat, keyboard-navigable results list below instead.
  */
 export function Books({ go }: { go: (h: string) => void }) {
   const { graph } = useGraph();
   const [books, setBooks] = useState<BookSummary[]>([]);
+  const [libraries, setLibraries] = useState<LibrarySummary[]>([]);
   const [error, setError] = useState<unknown>(null);
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState('');
   const [intent, setIntent] = useState('');
   const [q, setQ] = useState('');
   const [sel, setSel] = useState(0);
+  const [newLibOpen, setNewLibOpen] = useState(false);
+  const [newLibTitle, setNewLibTitle] = useState('');
   const input = useRef<HTMLInputElement>(null);
 
   async function load() {
     try {
-      setBooks(await api.books());
+      const [b, l] = await Promise.all([api.books(), api.libraries()]);
+      setBooks(b);
+      setLibraries(l);
     } catch (e) {
       setError(e);
     }
@@ -61,6 +70,48 @@ export function Books({ go }: { go: (h: string) => void }) {
       setIntent('');
       setCreating(false);
       go(`#/b/${created.id}`);
+    } catch (e) {
+      setError(e);
+    }
+  }
+
+  async function moveBook(bookId: string, libraryId: string | null) {
+    try {
+      await api.updateBook(bookId, { library_id: libraryId });
+      await load();
+    } catch (e) {
+      setError(e);
+    }
+  }
+
+  async function renameLibrary(id: string, t: string) {
+    if (!t.trim()) return;
+    try {
+      await api.updateLibrary(id, { title: t.trim() });
+      await load();
+    } catch (e) {
+      setError(e);
+    }
+  }
+
+  async function deleteLibrary(id: string) {
+    if (!confirm('Delete this library? Its books become unsorted, not deleted.')) return;
+    try {
+      await api.deleteLibrary(id);
+      await load();
+    } catch (e) {
+      setError(e);
+    }
+  }
+
+  async function createLibrary() {
+    const t = newLibTitle.trim();
+    if (!t) return;
+    try {
+      await api.createLibrary(t);
+      setNewLibTitle('');
+      setNewLibOpen(false);
+      await load();
     } catch (e) {
       setError(e);
     }
@@ -108,7 +159,7 @@ export function Books({ go }: { go: (h: string) => void }) {
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
-    if (!all.length) return;
+    if (!q || !all.length) return;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setSel((i) => (i + 1) % all.length);
@@ -128,6 +179,21 @@ export function Books({ go }: { go: (h: string) => void }) {
     for (const n of ns) by[n.state] = (by[n.state] ?? 0) + 1;
     return { total: ns.length, by };
   };
+
+  const byLibrary = useMemo(() => {
+    const map = new Map<string, BookSummary[]>();
+    const unsorted: BookSummary[] = [];
+    for (const b of books) {
+      if (b.library_id) {
+        const arr = map.get(b.library_id) ?? [];
+        arr.push(b);
+        map.set(b.library_id, arr);
+      } else {
+        unsorted.push(b);
+      }
+    }
+    return { map, unsorted };
+  }, [books]);
 
   return (
     <div className="wrap picker">
@@ -194,13 +260,70 @@ export function Books({ go }: { go: (h: string) => void }) {
         </div>
       )}
 
+      {!q && books.length > 0 && (
+        <div className="shelves">
+          {libraries.map((lib) => (
+            <Shelf
+              key={lib.id}
+              title={lib.title}
+              count={lib.book_count}
+              books={byLibrary.map.get(lib.id) ?? []}
+              libraries={libraries}
+              stats={stats}
+              go={go}
+              onMove={moveBook}
+              onRename={(t) => void renameLibrary(lib.id, t)}
+              onDelete={() => void deleteLibrary(lib.id)}
+            />
+          ))}
+
+          {(byLibrary.unsorted.length > 0 || libraries.length === 0) && (
+            <Shelf
+              title="Unsorted"
+              count={byLibrary.unsorted.length}
+              books={byLibrary.unsorted}
+              libraries={libraries}
+              stats={stats}
+              go={go}
+              onMove={moveBook}
+              unsorted
+            />
+          )}
+
+          {newLibOpen ? (
+            <div className="shelf shelf-new-form">
+              <input
+                autoFocus
+                className="field"
+                placeholder="Library name"
+                value={newLibTitle}
+                onChange={(e) => setNewLibTitle(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && void createLibrary()}
+              />
+              <div className="row" style={{ marginTop: 10 }}>
+                <button className="btn primary" onClick={() => void createLibrary()} disabled={!newLibTitle.trim()}>
+                  Create
+                </button>
+                <button className="btn" onClick={() => setNewLibOpen(false)}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button className="shelf-new" onClick={() => setNewLibOpen(true)}>
+              + New library
+            </button>
+          )}
+        </div>
+      )}
+
       {!!q && !all.length && (
         <p className="muted small" style={{ marginTop: 20 }}>
           Nothing matches “{q}”.
         </p>
       )}
 
-      {topics.length > 0 && (
+      {!!q && topics.length > 0 && (
         <>
           <p className="eyebrow" style={{ margin: '22px 0 8px' }}>Books</p>
           <div className="picker-list">
@@ -224,7 +347,7 @@ export function Books({ go }: { go: (h: string) => void }) {
                         {(Object.keys(st.by) as State[]).map((k) => (
                           <i
                             key={k}
-                            style={{ background: COLOR[k], width: `${((st.by[k] ?? 0) / st.total) * 100}%` }}
+                            style={{ background: STATE_COLOR[k], width: `${((st.by[k] ?? 0) / st.total) * 100}%` }}
                           />
                         ))}
                       </span>
@@ -238,7 +361,7 @@ export function Books({ go }: { go: (h: string) => void }) {
         </>
       )}
 
-      {questions.length > 0 && (
+      {!!q && questions.length > 0 && (
         <>
           <p className="eyebrow" style={{ margin: '22px 0 8px' }}>Questions</p>
           <div className="picker-list">
@@ -250,7 +373,7 @@ export function Books({ go }: { go: (h: string) => void }) {
                 onClick={() => open(h)}
               >
                 <span className="t">
-                  {h.state && <i className="dot" style={{ background: COLOR[h.state] }} />}
+                  {h.state && <i className="dot" style={{ background: STATE_COLOR[h.state] }} />}
                   {h.title}
                 </span>
                 <span className="s">
@@ -263,11 +386,154 @@ export function Books({ go }: { go: (h: string) => void }) {
         </>
       )}
 
-      {!q && all.length > 0 && (
+      {!!q && all.length > 0 && (
         <p className="small dimmer" style={{ marginTop: 24 }}>
           <kbd>↑</kbd><kbd>↓</kbd> to move · <kbd>Enter</kbd> to open
         </p>
       )}
+    </div>
+  );
+}
+
+/** One Library's row of book spines, or the "Unsorted" catch-all. */
+function Shelf({
+  title,
+  count,
+  books,
+  libraries,
+  stats,
+  go,
+  onMove,
+  onRename,
+  onDelete,
+  unsorted,
+}: {
+  title: string;
+  count: number;
+  books: BookSummary[];
+  libraries: LibrarySummary[];
+  stats: (id: string) => { total: number; by: Partial<Record<State, number>> } | null;
+  go: (h: string) => void;
+  onMove: (bookId: string, libraryId: string | null) => void;
+  onRename?: (title: string) => void;
+  onDelete?: () => void;
+  unsorted?: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(title);
+
+  return (
+    <div className="shelf">
+      <div className="shelf-head">
+        {editing ? (
+          <input
+            autoFocus
+            className="field shelf-title-input"
+            value={val}
+            onChange={(e) => setVal(e.target.value)}
+            onBlur={() => {
+              onRename?.(val);
+              setEditing(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                onRename?.(val);
+                setEditing(false);
+              } else if (e.key === 'Escape') {
+                setVal(title);
+                setEditing(false);
+              }
+            }}
+          />
+        ) : (
+          <button
+            className="shelf-title"
+            onClick={() => !unsorted && setEditing(true)}
+            title={unsorted ? undefined : 'Rename'}
+          >
+            {title}
+          </button>
+        )}
+        <span className="shelf-count small dimmer">
+          {count} book{count === 1 ? '' : 's'}
+        </span>
+        {!unsorted && (
+          <button className="shelf-del" onClick={onDelete} title="Delete library">
+            ×
+          </button>
+        )}
+      </div>
+      <div className="shelf-row">
+        {books.length === 0 ? (
+          <p className="shelf-empty small dimmer">Nothing shelved here yet.</p>
+        ) : (
+          books.map((b) => (
+            <Spine key={b.id} book={b} libraries={libraries} stats={stats} go={go} onMove={onMove} />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** One book as a bookshelf spine: width and height vary per book, and the color
+ * bands are that book's own question-state breakdown, most-done state on top. */
+function Spine({
+  book,
+  libraries,
+  stats,
+  go,
+  onMove,
+}: {
+  book: BookSummary;
+  libraries: LibrarySummary[];
+  stats: (id: string) => { total: number; by: Partial<Record<State, number>> } | null;
+  go: (h: string) => void;
+  onMove: (bookId: string, libraryId: string | null) => void;
+}) {
+  const h = hash(book.id);
+  const width = 34 + (h % 22);
+  const height = 148 + ((h >> 5) % 46);
+
+  const st = stats(book.id);
+  const order: State[] = ['verified', 'can_explain', 'understood', 'exploring', 'unexplored'];
+  let gradient = STATE_COLOR.unexplored;
+  if (st && st.total) {
+    let acc = 0;
+    const stops: string[] = [];
+    for (const k of order) {
+      const n = st.by[k] ?? 0;
+      if (!n) continue;
+      const pct = (n / st.total) * 100;
+      stops.push(`${STATE_COLOR[k]} ${acc}%`, `${STATE_COLOR[k]} ${acc + pct}%`);
+      acc += pct;
+    }
+    if (stops.length) gradient = `linear-gradient(180deg, ${stops.join(', ')})`;
+  }
+
+  return (
+    <div className="spine-slot" style={{ width }}>
+      <button
+        className="spine"
+        style={{ height, background: gradient }}
+        onClick={() => go(`#/b/${book.id}`)}
+        title={book.title}
+      >
+        <span className="spine-title">{book.title}</span>
+      </button>
+      <select
+        className="spine-move"
+        value={book.library_id ?? ''}
+        onChange={(e) => onMove(book.id, e.target.value || null)}
+        title="Move to library"
+      >
+        <option value="">Unsorted</option>
+        {libraries.map((l) => (
+          <option key={l.id} value={l.id}>
+            {l.title}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
